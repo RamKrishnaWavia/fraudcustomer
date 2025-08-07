@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
+import numpy as np  # Import numpy
 
 # --- 1. Data Input (Simulated or from Your Data Source) ---
 # ---  Option 1: Simulate data  ---
@@ -33,9 +34,9 @@ def generate_sample_data():
                 refund_chance = 0.85
 
 
-            if  pd.Series( [True] ).sample(frac=refund_chance).bool() :
+            # Use numpy's random.choice for a more direct and reliable approach
+            if np.random.choice([True, False], p=[refund_chance, 1 - refund_chance]):
                 refund_amount = order_amount * (0.2 + (0.1 if customer_id < 5 else 0))  # Vary refund amount
-
                 refund_amount = min(refund_amount,order_amount)
                 refund_request_date = order_date + timedelta(days=1)  # Make sure the order is before refund.
                 refund_reason = pd.Series(['Missing Item','Damaged Item','Poor Quality']).sample(1).iloc[0] if refund_amount > 0 else None
@@ -53,10 +54,6 @@ def generate_sample_data():
             data['refund_amount'].append(refund_amount)
             data['refund_reason'].append(refund_reason)
     return pd.DataFrame(data)
-
-
-# --- Option 2: Upload Data (Streamlit File Uploader) ---
-# upload_data = st.file_uploader("Upload your order/refund data (CSV)", type=["csv"])
 
 
 # --- 2. Data Processing & Fraud Detection Functions ---
