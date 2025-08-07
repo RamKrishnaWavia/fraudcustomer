@@ -198,12 +198,11 @@ def process_data(df: pd.DataFrame):
     #st.write(df.dtypes) # Debugging - print the dtypes before the conversion
     for col in date_columns:
         try:
-            df[col] = pd.to_datetime(df[col], format='%d-%m-%Y')
+            df[col] = pd.to_datetime(df[col], format='%d-%m-%Y', errors='coerce')  #  Handle potential errors
         except (ValueError, TypeError) as e:  # Catch both ValueError and TypeError
             st.error(f"Could not parse the date format for column '{col}'. Please check the format in your CSV file.  Expected format: DD-MM-YYYY.  Error: {e}")
             #st.stop() # Stop execution if the format is wrong
             return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()  # Return empty DataFrames to avoid processing errors
-
 
     # ---  Clean and Categorize Refund Reasons ---
     # Ensure refund_reason is a string (important for consistency) and handle missing values
