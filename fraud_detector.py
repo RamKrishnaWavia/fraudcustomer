@@ -195,12 +195,13 @@ def process_data(df: pd.DataFrame):
     # --- Preprocessing ---
     # --- Convert string-formatted dates to datetime objects ---
     date_columns = ['order_date', 'Report_date']  # Add all date columns here.
-
+    #st.write(df.dtypes) # Debugging - print the dtypes before the conversion
     for col in date_columns:
       try:
           df[col] = pd.to_datetime(df[col], format='%d-%m-%Y')
       except ValueError:
-          st.warning(f"Could not parse the date format for column '{col}'. Please check the format in your CSV file.  Expected format: DD-MM-YYYY")
+          st.error(f"Could not parse the date format for column '{col}'. Please check the format in your CSV file.  Expected format: DD-MM-YYYY")
+          #st.stop() # Stop execution if the format is wrong
           return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()  # Return empty DataFrames to avoid processing errors
 
 
