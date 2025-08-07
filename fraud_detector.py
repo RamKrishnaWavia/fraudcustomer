@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
-import numpy as np  # Import numpy
+import numpy as np
 
 # --- 1. Data Input (Simulated or from Your Data Source) ---
 # ---  Option 1: Simulate data  ---
@@ -117,8 +117,27 @@ elif data_source == "Upload CSV":
     if upload_data is not None:
         df = pd.read_csv(upload_data)
     else:
-        st.warning("Please upload a CSV file.")
-        df = pd.DataFrame()  # Or create an empty DataFrame
+        st.warning("Please upload a CSV file or download the template.")
+        # --- CSV Template Download Option ---
+        template_data = {
+            'customer_id': [1, 2, 3],
+            'order_id': [101, 102, 103],
+            'order_date': ['2024-11-01', '2024-11-02', '2024-11-03'],
+            'order_amount': [50.00, 75.00, 60.00],
+            'refund_request_date': ['', '2024-11-02', ''],
+            'refund_amount': [0.00, 25.00, 0.00],
+            'refund_reason': ['', 'Damaged Item', '']
+        }
+        template_df = pd.DataFrame(template_data)
+        csv_template = template_df.to_csv(index=False)
+        st.download_button(
+            label="Download CSV Template",
+            data=csv_template,
+            file_name="refund_data_template.csv",
+            mime="text/csv",
+        )
+        df = pd.DataFrame()  # Ensure df exists even with an error.
+
 else:
     st.error("Invalid data source selection.")
     df = pd.DataFrame() # Ensure df exists even with an error.
