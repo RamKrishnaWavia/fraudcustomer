@@ -197,67 +197,92 @@ def process_data(df: pd.DataFrame):
     date_columns = ['order_date', 'Report_date']  # Add all date columns here.
     #st.write(df.dtypes) # Debugging - print the dtypes before the conversion
     for col in date_columns:
-        try:
-            df[col] = pd.to_datetime(df[col], format='%d-%m-%Y', errors='coerce')  #  Handle potential errors
-        except (ValueError, TypeError) as e:  # Catch both ValueError and TypeError
-            st.error(f"Could not parse the date format for column '{col}'. Please check the format in your CSV file.  Expected format: DD-MM-YYYY.  Error: {e}")
-            #st.stop() # Stop execution if the format is wrong
-            return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()  # Return empty DataFrames to avoid processing errors
+        if col in df.columns: # Check if column exists
+            try:
+                df[col] = pd.to_datetime(df[col], format='%d-%m-%Y', errors='coerce')  #  Handle potential errors
+            except (ValueError, TypeError) as e:  # Catch both ValueError and TypeError
+                st.error(f"Could not parse the date format for column '{col}'. Please check the format in your CSV file.  Expected format: DD-MM-YYYY.  Error: {e}")
+                #st.stop() # Stop execution if the format is wrong
+                return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()  # Return empty DataFrames to avoid processing errors
+        else:
+            st.warning(f"Column '{col}' not found in the uploaded data.  Skipping date conversion for this column.")
+
 
     # ---  Clean and Categorize Refund Reasons ---
     # Ensure refund_reason is a string (important for consistency) and handle missing values
-    df['refund_reason'] = df['refund_reason'].astype(str)  # Convert to string
-    df['refund_reason'] = df['refund_reason'].str.title() # Standardize capitalization
+    if 'refund_reason' in df.columns:
+        df['refund_reason'] = df['refund_reason'].astype(str)  # Convert to string
+        df['refund_reason'] = df['refund_reason'].str.title() # Standardize capitalization
+    else:
+        st.warning("The 'refund_reason' column is missing in the data. Skipping refund categorization.")
 
     #Map refund reasons to categories
-    df['refund_category'] = df['refund_reason'].map(refund_reasons).fillna("Other")
+    if 'refund_reason' in df.columns:
+        df['refund_category'] = df['refund_reason'].map(refund_reasons).fillna("Other")
+    else:
+        df['refund_category'] = "Other"  # or create an empty column
 
     # --- Calculate Metrics ---
-    df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value
+    if 'quantity' in df.columns and 'selling_price' in df.columns:
+        df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value
+    else:
+        df['sale_value'] = 0  # or create an empty column
+
     #df['refund_to_order_ratio'] = (df['refund_amount'] / df['sale_value']) * 100 # use sale_value
     # IMPORTANT: Ensure there are no division by zero errors
-    df['refund_to_order_ratio'] = df.apply(lambda row: (row['refund_amount'] / row['sale_value']) * 100 if row['sale_value'] > 0 else 0, axis=1)
+    if 'refund_amount' in df.columns and 'sale_value' in df.columns:
+        df['refund_to_order_ratio'] = df.apply(lambda row: (row['refund_amount'] / row['sale_value']) * 100 if row['sale_value'] > 0 else 0, axis=1)
+    else:
+        df['refund_to_order_ratio'] = 0  # or create an empty column
 
+    customer_stats = pd.DataFrame()
+    category_counts = pd.DataFrame()
 
-    customer_stats = df.groupby('customer_id').agg(
-        total_orders=('order_id', 'count'),
-        total_refunds=('refund_amount', 'sum'),
-        num_refunds=('refund_amount', 'count'),
-        total_order_value=('sale_value', 'sum') # use sale value
-    )
-    customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
-    customer_stats['refund_to_order_percentage'] = (customer_stats['num_refunds'] / customer_stats['total_orders']) * 100
+    if not df.empty:
+      customer_stats = df.groupby('customer_id').agg(
+          total_orders=('order_id', 'count'),
+          total_refunds=('refund_amount', 'sum'),
+          num_refunds=('refund_amount', 'count'),
+          total_order_value=('sale_value', 'sum') # use sale value
+      )
+      customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
+      customer_stats['refund_to_order_percentage'] = (customer_stats['num_refunds'] / customer_stats['total_orders']) * 100
 
-    # Calculate the count for each category of refund reason.
-    category_counts = df.groupby(['customer_id', 'refund_category']).size().unstack(fill_value=0)
+      # Calculate the count for each category of refund reason.
+      if 'refund_category' in df.columns:
+        category_counts = df.groupby(['customer_id', 'refund_category']).size().unstack(fill_value=0)
+
     return df, customer_stats, category_counts  # Return the category counts
 
 @st.cache_data(show_spinner=True)
 def detect_fraud(customer_stats: pd.DataFrame, threshold_config: dict):
     # --- Apply Rules ---
     # Check if 'num_refunds' exists in customer_stats columns
-    if 'num_refunds' not in customer_stats.columns:
-        st.warning("The 'num_refunds' column is missing in the data.  Check your data or processing.")
-        return pd.DataFrame() # Return an empty DataFrame to avoid errors
+    if not customer_stats.empty:  # Check if customer_stats is not empty
+        if 'num_refunds' not in customer_stats.columns:
+            st.warning("The 'num_refunds' column is missing in the data.  Check your data or processing.")
+            return pd.DataFrame() # Return an empty DataFrame to avoid errors
 
-    if 'refund_ratio' not in customer_stats.columns:
-        st.warning("The 'refund_ratio' column is missing in the data. Check your data or processing.")
-        return pd.DataFrame()  # Return an empty DataFrame
+        if 'refund_ratio' not in customer_stats.columns:
+            st.warning("The 'refund_ratio' column is missing in the data. Check your data or processing.")
+            return pd.DataFrame()  # Return an empty DataFrame
 
-    if 'refund_to_order_percentage' not in customer_stats.columns:
-        st.warning("The 'refund_to_order_percentage' column is missing in the data. Check your data or processing.")
-        return pd.DataFrame()  # Return an empty DataFrame
+        if 'refund_to_order_percentage' not in customer_stats.columns:
+            st.warning("The 'refund_to_order_percentage' column is missing in the data. Check your data or processing.")
+            return pd.DataFrame()  # Return an empty DataFrame
 
 
-    fraud_customers = customer_stats[
-        (customer_stats['num_refunds'] >= threshold_config["num_refunds"]) |  # Rule 1
-        (customer_stats['refund_ratio'] >= threshold_config["refund_ratio"]) |  # Rule 2
-        (customer_stats['refund_to_order_percentage'] >= threshold_config["refund_to_order_percentage"])  # Rule 3
-    ]
+        fraud_customers = customer_stats[
+            (customer_stats['num_refunds'] >= threshold_config["num_refunds"]) |  # Rule 1
+            (customer_stats['refund_ratio'] >= threshold_config["refund_ratio"]) |  # Rule 2
+            (customer_stats['refund_to_order_percentage'] >= threshold_config["refund_to_order_percentage"])  # Rule 3
+        ]
 
-    fraud_customers = fraud_customers.sort_values(by=["refund_ratio"], ascending=False)  # Sort to show most suspicious customers first.
+        fraud_customers = fraud_customers.sort_values(by=["refund_ratio"], ascending=False)  # Sort to show most suspicious customers first.
 
-    return fraud_customers
+        return fraud_customers
+    else:
+        return pd.DataFrame() # Return empty DF if customer_stats is empty
 
 # --- 3. Streamlit UI ---
 st.title("Fraud Detection Tool for Daily Subscriptions")
