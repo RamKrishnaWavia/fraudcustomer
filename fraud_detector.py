@@ -10,37 +10,35 @@ def generate_sample_data():
     num_customers = 20
     data = {
         'Report_date': [],  # Add Report_date
-        'customer_id': [],
+        'customer_id': [],  # Changed to customer_id
         'order_id': [],
-        'order_date': [],
-        'quantity': [],
+        'order_date': [], # changed to order_date
+        'Refund_Date': [], # Added Refund_Date
+        'quantity': [], # Renamed to refund_quantity
         'selling_price': [],  # add selling_price for sale_value calculation
-        'refund_comment': [],
-        'refund_amount': [],
-        'refund_reason': [],
+        'comment': [],  #  Changed to comment = refund reason
+        'refund_amount': [], # changed to amount
+        'sub_id': [], # added sub_id
         # Add all the other columns, potentially with dummy data - based on the NEW template
-        'TYPE': [],
-        'DC_name': [],
-        'category': [],
-        'Hub': [],
+        'city': [],
+        'DC': [],
+        'DS': [],
+        'hub': [],
+        'agent_name': [],
+        'role': [],
         'society_name': [],
-        'sub_category': [],
-        'skuid': [],
+        'block': [],
+        'flat_no': [],
+        'bb_id': [],  # Example: Add dummy data
+        'customer_name': [],
+        'customer_category': [],
+        'bbdaily_category': [],
         'brand': [],
-        'product_name': [],
-        'sale_value': [],
-        'subscription_id': [],
-        'sales_without_delivery_charge': [],
-        'discount_amount': [],
-        'is_free_coupon_product': [],
-        'delivery_status': [],
-        'society_id': [],
-        'block_name': [],
-        'tag': [],
-        'order_ver': [],
-        'bb_order_id': [],
-        'fo_customer': [],
-
+        'product_id': [],
+        'product': [],
+        'pack_size': [],
+        'cee': [],
+        'is_fo_customer': [],
     }
 
     now = datetime.now()
@@ -65,46 +63,43 @@ def generate_sample_data():
                 refund_amount = min(refund_amount,selling_price * quantity) # ensure refund amount doesn't exceed order value
                 refund_request_date = order_date + timedelta(days=1)  # Make sure the order is before refund.
                 # Corrected refund reason generation
-                refund_reason = np.random.choice(list(refund_reasons.keys()), p=get_probabilities(list(refund_reasons.keys()))) if refund_amount > 0 else None
-                refund_comment = "Sample Refund Comment" if refund_reason else None
+                comment = np.random.choice(list(refund_reasons.keys()), p=get_probabilities(list(refund_reasons.keys()))) if refund_amount > 0 else None
             else:
                 refund_amount = 0
                 refund_request_date = None
-                refund_reason = None
-                refund_comment = None
+                comment = None
 
             data['Report_date'].append(datetime.now().strftime('%d-%m-%Y'))  #  Today's Date
             data['customer_id'].append(customer_id)
             data['order_id'].append(customer_id * 1000 + order_num)
             data['order_date'].append(order_date.strftime('%d-%m-%Y'))  # Correct date format
-            data['quantity'].append(quantity)
+            data['Refund_Date'].append(refund_request_date.strftime('%d-%m-%Y') if refund_request_date else '') # Add Refund_Date
+            data['quantity'].append(quantity) # Renamed to refund_quantity
             data['selling_price'].append(selling_price) # Include selling_price
-            data['refund_comment'].append(refund_comment)
-            data['refund_amount'].append(refund_amount)
-            data['refund_reason'].append(refund_reason)
+            data['comment'].append(comment) # Changed to refund_comment
+            data['refund_amount'].append(refund_amount)  # Changed to amount
+            data['sub_id'].append(12345)
 
             # Add dummy data for the other columns. - Based on the new template
-            data['TYPE'].append('Subscription')
-            data['DC_name'].append('Example DC')
-            data['category'].append('Example Category')
-            data['Hub'].append('Example Hub')
+            data['city'].append('Example City')
+            data['DC'].append('Example DC')
+            data['DS'].append('Example DS')
+            data['hub'].append('Example Hub')
+            data['agent_name'].append('Agent Name')
+            data['role'].append('Agent Role')
             data['society_name'].append('Example Society')
-            data['sub_category'].append('Example Sub')
-            data['skuid'].append(98765)
+            data['block'].append('A')
+            data['flat_no'].append('101')
+            data['bb_id'].append(12345)  # Example
+            data['customer_name'].append('Customer Name')
+            data['customer_category'].append('Regular')
+            data['bbdaily_category'].append('Milk')
             data['brand'].append('Example Brand')
-            data['product_name'].append('Example Product')
-            data['sale_value'].append(selling_price * quantity)
-            data['subscription_id'].append(9999) # example
-            data['sales_without_delivery_charge'].append(selling_price * quantity)
-            data['discount_amount'].append(0.0)
-            data['is_free_coupon_product'].append('N')
-            data['delivery_status'].append('Delivered')
-            data['society_id'].append(123) #example
-            data['block_name'].append('A')
-            data['tag'].append('Example Tag')
-            data['order_ver'].append('v2 orders')
-            data['bb_order_id'].append(1234567890) #example
-            data['fo_customer'].append('Y')
+            data['product_id'].append(98765)
+            data['product'].append('Example Product')
+            data['pack_size'].append('Example Pack')
+            data['cee'].append('Y')
+            data['is_fo_customer'].append('Y')
 
     return pd.DataFrame(data)
 
@@ -157,7 +152,7 @@ def process_data(df: pd.DataFrame):
 
     # --- Preprocessing ---
     # --- Convert string-formatted dates to datetime objects ---
-    date_columns = ['order_date', 'Report_date']  # Add all date columns here.
+    date_columns = ['order_date', 'Report_date', 'Refund_Date']  # Add all date columns here.
     #st.write(df.dtypes) # Debugging - print the dtypes before the conversion
     for col in date_columns:
         if col in df.columns: # Check if column exists
@@ -172,12 +167,12 @@ def process_data(df: pd.DataFrame):
 
 
     # ---  Clean and Categorize Refund Reasons ---
-    # Ensure refund_reason is a string (important for consistency) and handle missing values
-    if 'refund_reason' in df.columns:
-        df['refund_reason'] = df['refund_reason'].astype(str)  # Convert to string
+    # Ensure comment is a string (important for consistency) and handle missing values
+    if 'comment' in df.columns: # changed to comment
+        df['refund_reason'] = df['comment'].astype(str)  # Convert to string
         df['refund_reason'] = df['refund_reason'].str.title() # Standardize capitalization
     else:
-        st.warning("The 'refund_reason' column is missing in the data. Skipping refund categorization.")
+        st.warning("The 'comment' column is missing in the data. Skipping refund categorization.")
 
     #Map refund reasons to categories
     if 'refund_reason' in df.columns:
@@ -188,8 +183,8 @@ def process_data(df: pd.DataFrame):
     # --- Calculate Metrics ---
     #df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value  --> now calculating in generate_sample_data()
     # IMPORTANT: Ensure there are no division by zero errors
-    if 'refund_amount' in df.columns and 'sale_value' in df.columns:
-        df['refund_to_order_ratio'] = df.apply(lambda row: (row['refund_amount'] / row['sale_value']) * 100 if row['sale_value'] > 0 else 0, axis=1)
+    if 'amount' in df.columns and 'selling_price' in df.columns and 'quantity' in df.columns:
+        df['refund_to_order_ratio'] = df.apply(lambda row: (row['amount'] / (row['selling_price'] * row['quantity'])) * 100 if (row['selling_price'] * row['quantity']) > 0 else 0, axis=1)
     else:
         df['refund_to_order_ratio'] = 0  # or create an empty column
 
@@ -199,8 +194,8 @@ def process_data(df: pd.DataFrame):
     if not df.empty:
       customer_stats = df.groupby('customer_id').agg(
           total_orders=('order_id', 'count'),
-          total_refunds=('refund_amount', 'sum'),
-          num_refunds=('refund_amount', 'count'),
+          total_refunds=('amount', 'sum'), #changed to amount
+          num_refunds=('amount', 'count'), # changed to amount
           total_order_value=('sale_value', 'sum') # use sale value
       )
       customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
@@ -278,42 +273,44 @@ elif data_source == "Upload CSV":
         # --- CSV Template Download Option ---
         # Create the template with all columns *except* refund_amount and refund_reason
         template_data = {
-            'customer_id': ['2446017', '2192296', '2192296'],
+            'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
+            'customer_id': [2446017, 2192296, 2192296],
+            'sub_id': [12345, 12345, 12345], # Added sub_id
             'order_id': [1175332450, 1175332457, 1175332458],
-            'TYPE': ['Subscription', 'Subscription', 'Subscription'],
-            'DC_name': ['Ahmedabad-DC', 'Chennai-DC', 'Chennai-DC'],
-            'category': ['Milk', 'Breakfast, Snacks & Branded Foods', 'Milk'],
-            'Hub': ['Thaltej V2 Hub', 'Kelambakkam V2 Hub', 'Kelambakkam V2 Hub'],
-            'society_name': ['Shaligram Plush', 'Pacifica Aurum happiness tower', 'Pacifica Aurum happiness tower'],
-            'sub_category': ['All Milk', 'Biscuits & Cookies', 'All Milk'],
-            'skuid': [40090894, 40174324, 40151383],
-            'brand': ['Amul', 'Britannia', 'Aavin'],
-            'product_name': ['Taaza Milk', 'JimJam Flavoured Sandwich Biscuits', 'Pasteurised Standardised Milk'],
             'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
-            'quantity': [2, 1, 1],
+            'Refund_Date': ['', '',''], # added refund date
+            'city': ['Example City','Example City','Example City'],
+            'DC': ['Example DC', 'Example DC', 'Example DC'],
+            'DS': ['Example DS', 'Example DS', 'Example DS'],
+            'hub': ['Example Hub', 'Example Hub', 'Example Hub'],
+            'agent_name': ['Agent Name', 'Agent Name', 'Agent Name'],
+            'role': ['Agent Role', 'Agent Role', 'Agent Role'],
+            'society_name': ['Shaligram Plush', 'Pacifica Aurum happiness tower', 'Pacifica Aurum happiness tower'],
+            'block': ['B', 'B', 'B'],
+            'flat_no': ['101', '101', '101'],
+            'customer_name': ['Customer Name', 'Customer Name', 'Customer Name'],
+            'customer_category': ['Regular', 'Regular', 'Regular'],
+            'bbdaily_category': ['Milk', 'Milk', 'Milk'],
+            'brand': ['Amul', 'Britannia', 'Aavin'],
+            'product_id': [98765,98765,98765],
+            'product': ['Example Product','Example Product','Example Product'],
+            'pack_size': ['500 ml', '57 g', '500 ml Pouch'],
+            'quantity': [2, 1, 1], # Renamed
+            'selling_price': [28, 10, 22],
             'sale_value': [56, 10, 22],
-            'refund_comment': ['', '', ''],
-            'subscription_id': [9613982, 16113215, 16110043],
-            'sales_without_delivery_charge': [56, 10, 22],
-            'discount_amount': [0, 0, 0],
-            'is_free_coupon_product': [0, 0, 0],
-            'delivery_status': [1, 1, 1],
-            'society_id': [33535, 7931, 7931],
-            'block_name': ['B', 'B', 'B'],
-            'tag': ['', '', ''],
-            'order_ver': ['v2 orders', 'v2 orders', 'v2 orders'],
-            'bb_order_id': [1753822588, 1753785814, 1753785404],
-            'fo_customer': ['N', 'N', 'N']
+            'comment': ['', '', ''],  # Changed to comment = refund reason
+            'cee': ['Y', 'Y', 'Y'],
+            'is_fo_customer': ['Y', 'Y', 'Y'],
+            'amount': [0.00, 0.00, 0.00],  #renamed to amount
         }
 
         template_df = pd.DataFrame(template_data)
         csv_template = template_df.to_csv(index=False, columns=[
-            'customer_id', 'order_id', 'TYPE', 'DC_name', 'category', 'Hub',
-            'society_name', 'sub_category', 'skuid', 'brand', 'product_name',
-            'order_date', 'quantity', 'sale_value', 'refund_comment', 'subscription_id',
-            'sales_without_delivery_charge', 'discount_amount', 'is_free_coupon_product',
-            'delivery_status', 'society_id', 'block_name', 'tag', 'order_ver',
-            'bb_order_id', 'fo_customer',
+            'sub_id', 'order_id', 'order_date', 'Refund_Date', 'city', 'DC', 'DS', 'hub',
+            'agent_name', 'role', 'society_name', 'block', 'flat_no', 'customer_id',
+            'bb_id', 'customer_name', 'customer_category', 'bbdaily_category', 'brand',
+            'product_id', 'product', 'pack_size', 'refund_quantity', 'amount',
+            'comment', 'cee', 'is_fo_customer'
         ])
         st.download_button(
             label="Download CSV Template",
