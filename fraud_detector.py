@@ -277,7 +277,7 @@ elif data_source == "Upload CSV":
     else:
         st.warning("Please upload a CSV file or download the template.")
         # --- CSV Template Download Option ---
-        # Create the template with all columns
+        # Create the template with all columns *except* refund_amount and refund_reason
         template_data = {
             'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
             'customer_id': [2446017, 2192296, 2192296],
@@ -325,9 +325,7 @@ elif data_source == "Upload CSV":
             'order_ver': ['v2 orders', 'v2 orders', 'v2 orders'],
             'bb_order_id': [1753822588, 1753785814, 1753785404],
             'fo_customer': ['N', 'N', 'N'],
-            'cost_price_processed': [0, 8.4, 0],
-            'refund_amount': [0.00, 0.00, 0.00],
-            'refund_reason': ['', '', '']
+            'cost_price_processed': [0, 8.4, 0]
         }
 
         template_df = pd.DataFrame(template_data)
