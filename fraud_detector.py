@@ -214,7 +214,9 @@ def process_data(df: pd.DataFrame):
 
     # --- Calculate Metrics ---
     df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value
-    df['refund_to_order_ratio'] = (df['refund_amount'] / df['sale_value']) * 100 # use sale_value
+    #df['refund_to_order_ratio'] = (df['refund_amount'] / df['sale_value']) * 100 # use sale_value
+    # IMPORTANT: Ensure there are no division by zero errors
+    df['refund_to_order_ratio'] = df.apply(lambda row: (row['refund_amount'] / row['sale_value']) * 100 if row['sale_value'] > 0 else 0, axis=1)
 
 
     customer_stats = df.groupby('customer_id').agg(
@@ -233,6 +235,20 @@ def process_data(df: pd.DataFrame):
 @st.cache_data(show_spinner=True)
 def detect_fraud(customer_stats: pd.DataFrame, threshold_config: dict):
     # --- Apply Rules ---
+    # Check if 'num_refunds' exists in customer_stats columns
+    if 'num_refunds' not in customer_stats.columns:
+        st.warning("The 'num_refunds' column is missing in the data.  Check your data or processing.")
+        return pd.DataFrame() # Return an empty DataFrame to avoid errors
+
+    if 'refund_ratio' not in customer_stats.columns:
+        st.warning("The 'refund_ratio' column is missing in the data. Check your data or processing.")
+        return pd.DataFrame()  # Return an empty DataFrame
+
+    if 'refund_to_order_percentage' not in customer_stats.columns:
+        st.warning("The 'refund_to_order_percentage' column is missing in the data. Check your data or processing.")
+        return pd.DataFrame()  # Return an empty DataFrame
+
+
     fraud_customers = customer_stats[
         (customer_stats['num_refunds'] >= threshold_config["num_refunds"]) |  # Rule 1
         (customer_stats['refund_ratio'] >= threshold_config["refund_ratio"]) |  # Rule 2
@@ -355,27 +371,29 @@ if not df.empty:
     df, customer_stats, category_counts = process_data(df)  # Get category counts
 
     # --- Detect Fraud ---
-    fraud_customers = detect_fraud(customer_stats, threshold_config)
+    if not customer_stats.empty:
+        fraud_customers = detect_fraud(customer_stats, threshold_config)
 
-    # --- Display Results ---
-    if not fraud_customers.empty:
-        st.subheader("Potential Fraud Customers")
-        st.dataframe(fraud_customers)
+        # --- Display Results ---
+        if not fraud_customers.empty:
+            st.subheader("Potential Fraud Customers")
+            st.dataframe(fraud_customers)
 
-        # Detailed View (for more in-depth analysis)
-        customer_id_to_investigate = st.selectbox("Select Customer ID for Details", fraud_customers.index.tolist())
-        if customer_id_to_investigate:
-            customer_details = df[df['customer_id'] == customer_id_to_investigate].sort_values(by="order_date", ascending=False)  # show most recent first
-            st.subheader(f"Customer {customer_id_to_investigate} Order/Refund History")
-            st.dataframe(customer_details)
+            # Detailed View (for more in-depth analysis)
+            customer_id_to_investigate = st.selectbox("Select Customer ID for Details", fraud_customers.index.tolist())
+            if customer_id_to_investigate:
+                customer_details = df[df['customer_id'] == customer_id_to_investigate].sort_values(by="order_date", ascending=False)  # show most recent first
+                st.subheader(f"Customer {customer_id_to_investigate} Order/Refund History")
+                st.dataframe(customer_details)
 
-            # Display refund reason counts by category
-            st.subheader("Refund Reason Breakdown")
-            if customer_id_to_investigate in category_counts.index:
-                category_data = category_counts.loc[customer_id_to_investigate]
-                st.bar_chart(category_data)
-            else:
-                st.write("No refund reasons found for this customer.")
-
+                # Display refund reason counts by category
+                st.subheader("Refund Reason Breakdown")
+                if customer_id_to_investigate in category_counts.index:
+                    category_data = category_counts.loc[customer_id_to_investigate]
+                    st.bar_chart(category_data)
+                else:
+                    st.write("No refund reasons found for this customer.")
+        else:
+            st.success("No suspicious activity detected based on current thresholds.")
     else:
-        st.success("No suspicious activity detected based on current thresholds.")
+        st.write("No customer data to analyze.")
