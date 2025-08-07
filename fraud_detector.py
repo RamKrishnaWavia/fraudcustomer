@@ -184,9 +184,12 @@ def process_data(df: pd.DataFrame):
     #df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value  --> now calculating in generate_sample_data()
     # IMPORTANT: Ensure there are no division by zero errors
     if 'amount' in df.columns and 'selling_price' in df.columns and 'quantity' in df.columns:
-        df['refund_to_order_ratio'] = df.apply(lambda row: (row['amount'] / (row['selling_price'] * row['quantity'])) * 100 if (row['selling_price'] * row['quantity']) > 0 else 0, axis=1)
+        df['sale_value'] = df['quantity'] * df['selling_price']
+        df['refund_to_order_ratio'] = df.apply(lambda row: (row['amount'] / row['sale_value']) * 100 if row['sale_value'] > 0 else 0, axis=1)
     else:
         df['refund_to_order_ratio'] = 0  # or create an empty column
+        df['sale_value'] = 0 # create a new empty column
+
 
     customer_stats = pd.DataFrame()
     category_counts = pd.DataFrame()
@@ -277,107 +280,4 @@ elif data_source == "Upload CSV":
         # --- CSV Template Download Option ---
         # Create the template with all columns *except* refund_amount and refund_reason
         template_data = {
-            'customer_id': ['2446017', '2192296', '2192296'],
-            'order_id': [1175332450, 1175332457, 1175332458],
-            'TYPE': ['Subscription', 'Subscription', 'Subscription'],
-            'DC_name': ['Ahmedabad-DC', 'Chennai-DC', 'Chennai-DC'],
-            'category': ['Milk', 'Breakfast, Snacks & Branded Foods', 'Milk'],
-            'Hub': ['Thaltej V2 Hub', 'Kelambakkam V2 Hub', 'Kelambakkam V2 Hub'],
-            'society_name': ['Shaligram Plush', 'Pacifica Aurum happiness tower', 'Pacifica Aurum happiness tower'],
-            'sub_category': ['All Milk', 'Biscuits & Cookies', 'All Milk'],
-            'skuid': [40090894, 40174324, 40151383],
-            'brand': ['Amul', 'Britannia', 'Aavin'],
-            'product_name': ['Taaza Milk', 'JimJam Flavoured Sandwich Biscuits', 'Pasteurised Standardised Milk'],
-            'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
-            'quantity': [2, 1, 1],
-            'selling_price': [28, 10, 22],
-            'sale_value': [56, 10, 22],
-            'comment': ['', '', ''],  # Changed to comment = refund reason
-            'subscription_id': [9613982, 16113215, 16110043],
-            'sales_without_delivery_charge': [56, 10, 22],
-            'discount_amount': [0, 0, 0],
-            'is_free_coupon_product': [0, 0, 0],
-            'delivery_status': [1, 1, 1],
-            'society_id': [33535, 7931, 7931],
-            'block_name': ['B', 'B', 'B'],
-            'tag': ['', '', ''],
-            'order_ver': ['v2 orders', 'v2 orders', 'v2 orders'],
-            'bb_order_id': [1753822588, 1753785814, 1753785404],
-            'fo_customer': ['N', 'N', 'N'],
-            'amount': [0.00, 0.00, 0.00],  #renamed to amount
-            'sub_id': [12345,12345,12345],
-            'Refund_Date': ['06-08-2025','06-08-2025','06-08-2025'],
-            'city': ['Example City','Example City','Example City'],
-            'DC': ['Example DC', 'Example DC', 'Example DC'],
-            'DS': ['Example DS', 'Example DS', 'Example DS'],
-            'hub': ['Example Hub', 'Example Hub', 'Example Hub'],
-            'agent_name': ['Agent Name', 'Agent Name', 'Agent Name'],
-            'role': ['Agent Role', 'Agent Role', 'Agent Role'],
-            'flat_no': ['101','101','101'], # Adding flat_no
-            'bb_id': [12345, 12345, 12345], # Make sure this is a string
-            'customer_name':['Cust Name', 'Cust Name', 'Cust Name'],
-            'customer_category':['Regular', 'Regular', 'Regular'],
-            'bbdaily_category':['Milk', 'Milk', 'Milk'],
-            'product_id':[1,2,3],
-            'product':['milk','milk','milk'],
-            'pack_size':['1L','1L','1L'],
-        }
-
-        template_df = pd.DataFrame(template_data)
-        csv_template = template_df.to_csv(index=False, columns=[
-            'sub_id', 'order_id', 'order_date', 'Refund_Date', 'city', 'DC', 'DS', 'hub',
-            'agent_name', 'role', 'society_name', 'block', 'flat_no', 'customer_id',
-            'bb_id', 'customer_name', 'customer_category', 'bbdaily_category', 'brand',
-            'product_id', 'product', 'pack_size', 'quantity', 'selling_price','sale_value', 'comment', 'cee', 'is_fo_customer',
-        ])
-        st.download_button(
-            label="Download CSV Template",
-            data=csv_template,
-            file_name="refund_data_template.csv",
-            mime="text/csv",
-        )
-        df = pd.DataFrame()  # Ensure df exists even with an error.
-else:
-    st.error("Invalid data source selection.")
-    df = pd.DataFrame()  # Ensure df exists even with an error.
-
-# --- 4. Fraud Detection and Display ---
-if not df.empty:
-    # --- Configure Thresholds  ---
-    st.sidebar.header("Threshold Configuration")
-    threshold_config = {
-        "num_refunds": st.sidebar.slider("Minimum Number of Refunds", 1, 10, 2),
-        "refund_ratio": st.sidebar.slider("Refund Ratio Threshold (%)", 0, 100, 20),
-        "refund_to_order_percentage": st.sidebar.slider("Refunds per Order (%)", 0, 100, 20)
-    }
-
-    # --- Process Data ---
-    df, customer_stats, category_counts = process_data(df)  # Get category counts
-
-    # --- Detect Fraud ---
-    if not customer_stats.empty:
-        fraud_customers = detect_fraud(customer_stats, threshold_config)
-
-        # --- Display Results ---
-        if not fraud_customers.empty:
-            st.subheader("Potential Fraud Customers")
-            st.dataframe(fraud_customers)
-
-            # Detailed View (for more in-depth analysis)
-            customer_id_to_investigate = st.selectbox("Select Customer ID for Details", fraud_customers.index.tolist())
-            if customer_id_to_investigate:
-                customer_details = df[df['customer_id'] == customer_id_to_investigate].sort_values(by="order_date", ascending=False)  # show most recent first
-                st.subheader(f"Customer {customer_id_to_investigate} Order/Refund History")
-                st.dataframe(customer_details)
-
-                # Display refund reason counts by category
-                st.subheader("Refund Reason Breakdown")
-                if customer_id_to_investigate in category_counts.index:
-                    category_data = category_counts.loc[customer_id_to_investigate]
-                    st.bar_chart(category_data)
-                else:
-                    st.write("No refund reasons found for this customer.")
-        else:
-            st.success("No suspicious activity detected based on current thresholds.")
-    else:
-        st.write("No customer data to analyze.")
+           
