@@ -9,22 +9,18 @@ def generate_sample_data():
     # Simulate a mix of legitimate and potentially fraudulent data (using fewer columns for demo)
     num_customers = 20
     data = {
-        'Report_date': [],
+        'Report_date': [],  # Add Report_date
         'customer_id': [],
         'order_id': [],
         'order_date': [],
         'quantity': [],
-        'selling_price': [],
+        'selling_price': [],  # add selling_price for sale_value calculation
         'refund_comment': [],
         'refund_amount': [],
         'refund_reason': [],
-        # Add all the other columns, potentially with dummy data
-        'bb_id': [],  # Example: Add dummy data
+        # Add all the other columns, potentially with dummy data - based on the NEW template
         'TYPE': [],
         'DC_name': [],
-        'fc_name': [],
-        'fc_id': [],
-        'dark_store': [],
         'category': [],
         'Hub': [],
         'society_name': [],
@@ -32,25 +28,11 @@ def generate_sample_data():
         'skuid': [],
         'brand': [],
         'product_name': [],
-        'pack_size': [],
-        'hsn': [],
-        'GST_percent': [],
-        'Cess_percent': [],
-        'sales_without_tax': [],
-        'SGST_Value': [],
-        'CGST_Value': [],
-        'IGST_Value': [],
-        'CESS_Value': [],
-        'mrp': [],
-        'cost_price': [],
         'sale_value': [],
-        'slot_charges': [],
-        'is_indent': [],
         'subscription_id': [],
         'sales_without_delivery_charge': [],
         'discount_amount': [],
         'is_free_coupon_product': [],
-        'user_source': [],
         'delivery_status': [],
         'society_id': [],
         'block_name': [],
@@ -58,7 +40,7 @@ def generate_sample_data():
         'order_ver': [],
         'bb_order_id': [],
         'fo_customer': [],
-        'cost_price_processed': []
+
     }
 
     now = datetime.now()
@@ -96,18 +78,14 @@ def generate_sample_data():
             data['order_id'].append(customer_id * 1000 + order_num)
             data['order_date'].append(order_date.strftime('%d-%m-%Y'))  # Correct date format
             data['quantity'].append(quantity)
-            data['selling_price'].append(selling_price)
+            data['selling_price'].append(selling_price) # Include selling_price
             data['refund_comment'].append(refund_comment)
             data['refund_amount'].append(refund_amount)
             data['refund_reason'].append(refund_reason)
 
-            # Add dummy data for the other columns.
-            data['bb_id'].append(12345)  # Example
+            # Add dummy data for the other columns. - Based on the new template
             data['TYPE'].append('Subscription')
             data['DC_name'].append('Example DC')
-            data['fc_name'].append('Example FC')
-            data['fc_id'].append(100)
-            data['dark_store'].append('Example DS')
             data['category'].append('Example Category')
             data['Hub'].append('Example Hub')
             data['society_name'].append('Example Society')
@@ -115,25 +93,11 @@ def generate_sample_data():
             data['skuid'].append(98765)
             data['brand'].append('Example Brand')
             data['product_name'].append('Example Product')
-            data['pack_size'].append('Example Pack')
-            data['hsn'].append('12345678')
-            data['GST_percent'].append(5.0)
-            data['Cess_percent'].append(0.0)
-            data['sales_without_tax'].append(selling_price * quantity)  # Example
-            data['SGST_Value'].append(0.0)
-            data['CGST_Value'].append(0.0)
-            data['IGST_Value'].append(0.0)
-            data['CESS_Value'].append(0.0)
-            data['mrp'].append(selling_price + 5)  # Example: MRP is a bit higher.
-            data['cost_price'].append(selling_price - 3) # Example: Cost Price is a bit lower.
-            data['sale_value'].append(selling_price * quantity) # example value, can be computed.
-            data['slot_charges'].append(0.0)
-            data['is_indent'].append('N')
+            data['sale_value'].append(selling_price * quantity)
             data['subscription_id'].append(9999) # example
             data['sales_without_delivery_charge'].append(selling_price * quantity)
             data['discount_amount'].append(0.0)
             data['is_free_coupon_product'].append('N')
-            data['user_source'].append('bbDaily')
             data['delivery_status'].append('Delivered')
             data['society_id'].append(123) #example
             data['block_name'].append('A')
@@ -141,7 +105,6 @@ def generate_sample_data():
             data['order_ver'].append('v2 orders')
             data['bb_order_id'].append(1234567890) #example
             data['fo_customer'].append('Y')
-            data['cost_price_processed'].append(selling_price - 3)
 
     return pd.DataFrame(data)
 
@@ -223,12 +186,7 @@ def process_data(df: pd.DataFrame):
         df['refund_category'] = "Other"  # or create an empty column
 
     # --- Calculate Metrics ---
-    if 'quantity' in df.columns and 'selling_price' in df.columns:
-        df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value
-    else:
-        df['sale_value'] = 0  # or create an empty column
-
-    #df['refund_to_order_ratio'] = (df['refund_amount'] / df['sale_value']) * 100 # use sale_value
+    #df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value  --> now calculating in generate_sample_data()
     # IMPORTANT: Ensure there are no division by zero errors
     if 'refund_amount' in df.columns and 'sale_value' in df.columns:
         df['refund_to_order_ratio'] = df.apply(lambda row: (row['refund_amount'] / row['sale_value']) * 100 if row['sale_value'] > 0 else 0, axis=1)
@@ -322,7 +280,6 @@ elif data_source == "Upload CSV":
         template_data = {
             'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
             'customer_id': [2446017, 2192296, 2192296],
-            'bb_id': [10868036, 6265092, 6265092],
             'order_id': [1175332450, 1175332457, 1175332458],
             'TYPE': ['Subscription', 'Subscription', 'Subscription'],
             'DC_name': ['Ahmedabad-DC', 'Chennai-DC', 'Chennai-DC'],
@@ -350,7 +307,7 @@ elif data_source == "Upload CSV":
             'mrp': [28, 10, 22],
             'cost_price': [24.89, 8.4, 21.53],
             'selling_price': [28, 10, 22],
-            'sale_value': [56, 10, 22],
+            'sale_value': [56, 10, 22], # Add sale_value
             'slot_charges': [0, 0, 0],
             'is_indent': ['N', 'Y', 'N'],
             'refund_comment': ['', '', ''],
@@ -370,7 +327,13 @@ elif data_source == "Upload CSV":
         }
 
         template_df = pd.DataFrame(template_data)
-        csv_template = template_df.to_csv(index=False)
+        csv_template = template_df.to_csv(index=False, columns=[
+            'Report_date', 'customer_id', 'order_id', 'order_date', 'quantity', 'selling_price',
+            'TYPE', 'DC_name', 'category', 'Hub', 'society_name', 'sub_category', 'skuid',
+            'brand', 'product_name', 'sale_value', 'subscription_id', 'sales_without_delivery_charge',
+            'discount_amount', 'is_free_coupon_product', 'delivery_status', 'society_id',
+            'block_name', 'tag', 'order_ver', 'bb_order_id', 'fo_customer'
+        ])
         st.download_button(
             label="Download CSV Template",
             data=csv_template,
