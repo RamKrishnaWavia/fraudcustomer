@@ -6,14 +6,16 @@ import numpy as np
 # --- 1. Data Input (Simulated or from Your Data Source) ---
 # ---  Option 1: Simulate data  ---
 def generate_sample_data():
-    # Simulate a mix of legitimate and potentially fraudulent data
+    # Simulate a mix of legitimate and potentially fraudulent data (using fewer columns for demo)
     num_customers = 20
     data = {
+        'Report_date': [],
         'customer_id': [],
         'order_id': [],
         'order_date': [],
-        'order_amount': [],
-        'refund_request_date': [],
+        'quantity': [],
+        'selling_price': [],
+        'refund_comment': [],
         'refund_amount': [],
         'refund_reason': []
     }
@@ -23,7 +25,8 @@ def generate_sample_data():
         num_orders = 3 + (customer_id % 4)  # Vary orders per customer
         for order_num in range(1, num_orders + 1):
             order_date = now - timedelta(days=(order_num + (customer_id * 2)) % 30)  # Create variety in order dates
-            order_amount = 25 + (order_num * 5) + (customer_id % 15)
+            quantity = 1 + (order_num % 3)  # Quantity 1,2, or 3
+            selling_price = 25 + (order_num * 5) + (customer_id % 15) # Price
             refund_chance = 0.1 if customer_id < 5 else (0.3 if customer_id < 8 else 0.05)  # Higher refund chance for some customers
             if st.session_state.debug_mode and customer_id >= 18:  # Force fraud for debugging
                 refund_chance = 0.85
@@ -35,23 +38,27 @@ def generate_sample_data():
 
             # Use numpy's random.choice for a more direct and reliable approach
             if np.random.choice([True, False], p=[refund_chance, 1 - refund_chance]):
-                refund_amount = order_amount * (0.2 + (0.1 if customer_id < 5 else 0))  # Vary refund amount
-                refund_amount = min(refund_amount, order_amount)
+                refund_amount = selling_price * quantity * (0.2 + (0.1 if customer_id < 5 else 0))  # Vary refund amount
+                refund_amount = min(refund_amount,selling_price * quantity) # ensure refund amount doesn't exceed order value
                 refund_request_date = order_date + timedelta(days=1)  # Make sure the order is before refund.
                 refund_reason = np.random.choice(list(refund_reasons.keys()), p = [0.2,0.2,0.1,0.1,0.1,0.1,0.1,0.05,0.05]).title() if refund_amount > 0 else None # select a random refund_reason from the available list
-
+                refund_comment = "Sample Refund Comment" if refund_reason else None
             else:
                 refund_amount = 0
                 refund_request_date = None
                 refund_reason = None
+                refund_comment = None
 
+            data['Report_date'].append(datetime.now().strftime('%d-%m-%Y'))  #  Today's Date
             data['customer_id'].append(customer_id)
             data['order_id'].append(customer_id * 1000 + order_num)
-            data['order_date'].append(order_date)
-            data['order_amount'].append(order_amount)
-            data['refund_request_date'].append(refund_request_date)
+            data['order_date'].append(order_date.strftime('%d-%m-%Y'))  # Correct date format
+            data['quantity'].append(quantity)
+            data['selling_price'].append(selling_price)
+            data['refund_comment'].append(refund_comment)
             data['refund_amount'].append(refund_amount)
             data['refund_reason'].append(refund_reason)
+
     return pd.DataFrame(data)
 
 # --- 1.a  Define Refund Reason Categories and Mapping---
@@ -85,9 +92,18 @@ refund_reasons = {
 # --- 2. Data Processing & Fraud Detection Functions ---
 @st.cache_data  # Use caching to avoid re-processing on every rerun
 def process_data(df: pd.DataFrame):
+
     # --- Preprocessing ---
-    df['order_date'] = pd.to_datetime(df['order_date'])
-    df['refund_request_date'] = pd.to_datetime(df['refund_request_date'])
+    # --- Convert string-formatted dates to datetime objects ---
+    date_columns = ['order_date', 'Report_date']  # Add all date columns here.
+
+    for col in date_columns:
+      try:
+          df[col] = pd.to_datetime(df[col], format='%d-%m-%Y')
+      except ValueError:
+          st.warning(f"Could not parse the date format for column '{col}'. Please check the format in your CSV file.  Expected format: DD-MM-YYYY")
+          return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()  # Return empty DataFrames to avoid processing errors
+
 
     # ---  Clean and Categorize Refund Reasons ---
     # Ensure refund_reason is a string (important for consistency) and handle missing values
@@ -98,13 +114,15 @@ def process_data(df: pd.DataFrame):
     df['refund_category'] = df['refund_reason'].map(refund_reasons).fillna("Other")
 
     # --- Calculate Metrics ---
-    df['refund_to_order_ratio'] = (df['refund_amount'] / df['order_amount']) * 100
+    df['sale_value'] = df['quantity'] * df['selling_price']  # Calculate sale value
+    df['refund_to_order_ratio'] = (df['refund_amount'] / df['sale_value']) * 100 # use sale_value
+
 
     customer_stats = df.groupby('customer_id').agg(
         total_orders=('order_id', 'count'),
         total_refunds=('refund_amount', 'sum'),
         num_refunds=('refund_amount', 'count'),
-        total_order_value=('order_amount', 'sum')
+        total_order_value=('sale_value', 'sum') # use sale value
     )
     customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
     customer_stats['refund_to_order_percentage'] = (customer_stats['num_refunds'] / customer_stats['total_orders']) * 100
@@ -152,19 +170,26 @@ if data_source == "Simulated Data":
 elif data_source == "Upload CSV":
     upload_data = st.file_uploader("Upload your order/refund data (CSV)", type=["csv"])
     if upload_data is not None:
-        df = pd.read_csv(upload_data)
+        try:
+            df = pd.read_csv(upload_data)
+        except Exception as e:
+            st.error(f"Error reading CSV: {e}")
+            df = pd.DataFrame() # Reset to empty dataframe on error
     else:
         st.warning("Please upload a CSV file or download the template.")
         # --- CSV Template Download Option ---
         template_data = {
-            'customer_id': [1, 2, 3],
-            'order_id': [101, 102, 103],
-            'order_date': ['2024-11-01', '2024-11-02', '2024-11-03'],
-            'order_amount': [50.00, 75.00, 60.00],
-            'refund_request_date': ['', '2024-11-02', ''],
-            'refund_amount': [0.00, 25.00, 0.00],
-            'refund_reason': ['', 'Damaged Item', '']  # Added refund_reason
+            'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
+            'customer_id': [2446017, 2192296, 2192296],
+            'order_id': [1175332450, 1175332457, 1175332458],
+            'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
+            'quantity': [2, 1, 1],
+            'selling_price': [28.00, 10.00, 22.00],
+            'refund_comment': ['', '', ''],
+            'refund_amount': [0.00, 0.00, 0.00],
+            'refund_reason': ['', '', '']
         }
+
         template_df = pd.DataFrame(template_data)
         csv_template = template_df.to_csv(index=False)
         st.download_button(
