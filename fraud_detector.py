@@ -20,26 +20,25 @@ def generate_sample_data():
 
     now = datetime.now()
     for customer_id in range(1, num_customers + 1):
-        num_orders = 3 + (customer_id % 4) # Vary orders per customer
+        num_orders = 3 + (customer_id % 4)  # Vary orders per customer
         for order_num in range(1, num_orders + 1):
-            order_date = now - timedelta(days= (order_num + (customer_id * 2)) % 30) # Create variety in order dates
+            order_date = now - timedelta(days=(order_num + (customer_id * 2)) % 30)  # Create variety in order dates
             order_amount = 25 + (order_num * 5) + (customer_id % 15)
             refund_chance = 0.1 if customer_id < 5 else (0.3 if customer_id < 8 else 0.05)  # Higher refund chance for some customers
-            if st.session_state.debug_mode and customer_id >=18:  # Force fraud for debugging
+            if st.session_state.debug_mode and customer_id >= 18:  # Force fraud for debugging
                 refund_chance = 0.85
             if (customer_id % 4) == 0 and order_num == num_orders:  # More fraud
                 refund_chance = 0.75
 
-            if st.session_state.debug_mode and customer_id == 2: # force fraud for debug
+            if st.session_state.debug_mode and customer_id == 2:  # force fraud for debug
                 refund_chance = 0.85
-
 
             # Use numpy's random.choice for a more direct and reliable approach
             if np.random.choice([True, False], p=[refund_chance, 1 - refund_chance]):
                 refund_amount = order_amount * (0.2 + (0.1 if customer_id < 5 else 0))  # Vary refund amount
-                refund_amount = min(refund_amount,order_amount)
+                refund_amount = min(refund_amount, order_amount)
                 refund_request_date = order_date + timedelta(days=1)  # Make sure the order is before refund.
-                refund_reason = pd.Series(['Missing Item','Damaged Item','Poor Quality']).sample(1).iloc[0] if refund_amount > 0 else None
+                refund_reason = np.random.choice(list(refund_reasons.keys()), p = [0.2,0.2,0.1,0.1,0.1,0.1,0.1,0.05,0.05]).title() if refund_amount > 0 else None # select a random refund_reason from the available list
 
             else:
                 refund_amount = 0
@@ -47,7 +46,7 @@ def generate_sample_data():
                 refund_reason = None
 
             data['customer_id'].append(customer_id)
-            data['order_id'].append(customer_id*1000 + order_num)
+            data['order_id'].append(customer_id * 1000 + order_num)
             data['order_date'].append(order_date)
             data['order_amount'].append(order_amount)
             data['refund_request_date'].append(refund_request_date)
@@ -55,13 +54,48 @@ def generate_sample_data():
             data['refund_reason'].append(refund_reason)
     return pd.DataFrame(data)
 
+# --- 1.a  Define Refund Reason Categories and Mapping---
+refund_reasons = {
+    "LESS_PACKED_QUANTITY": "Quantity",
+    "Unable to locate address": "Delivery",
+    "V2 Open Orders": "Order Management",
+    "Leakage / Damage": "Quality",
+    "Wrong Product": "Order Issue",
+    "Quality issue": "Quality",
+    "Marked Delivered But Not Received": "Delivery",
+    "Partial delivery": "Delivery",
+    "Delay in delivery": "Delivery",
+    "Grammage difference": "Quality",
+    "EXCESS_PACKED_QUANTITY": "Quantity",
+    "Product Not Delivered": "Delivery",
+    "Not available": "Availability",
+    "Weight Variance": "Quality",
+    "OPS request": "Order Management",
+    "Wrongly ordered": "Order Issue",
+    "MRP issue": "Pricing",
+    "Expired product": "Quality",
+    "Free product not delivered": "Order Issue",
+    "Open order refund": "Order Management",
+    "Coupon code issue": "Pricing",
+    "damaged": "Quality",
+    "missing items": "Quantity",
+    "Closing the society": "Other"
+}
 
 # --- 2. Data Processing & Fraud Detection Functions ---
 @st.cache_data  # Use caching to avoid re-processing on every rerun
-def process_data(df:pd.DataFrame):
+def process_data(df: pd.DataFrame):
     # --- Preprocessing ---
     df['order_date'] = pd.to_datetime(df['order_date'])
     df['refund_request_date'] = pd.to_datetime(df['refund_request_date'])
+
+    # ---  Clean and Categorize Refund Reasons ---
+    # Ensure refund_reason is a string (important for consistency) and handle missing values
+    df['refund_reason'] = df['refund_reason'].astype(str)  # Convert to string
+    df['refund_reason'] = df['refund_reason'].str.title() # Standardize capitalization
+
+    #Map refund reasons to categories
+    df['refund_category'] = df['refund_reason'].map(refund_reasons).fillna("Other")
 
     # --- Calculate Metrics ---
     df['refund_to_order_ratio'] = (df['refund_amount'] / df['order_amount']) * 100
@@ -74,10 +108,13 @@ def process_data(df:pd.DataFrame):
     )
     customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
     customer_stats['refund_to_order_percentage'] = (customer_stats['num_refunds'] / customer_stats['total_orders']) * 100
-    return df, customer_stats
+
+    # Calculate the count for each category of refund reason.
+    category_counts = df.groupby(['customer_id', 'refund_category']).size().unstack(fill_value=0)
+    return df, customer_stats, category_counts  # Return the category counts
 
 @st.cache_data(show_spinner=True)
-def detect_fraud(customer_stats:pd.DataFrame, threshold_config:dict):
+def detect_fraud(customer_stats: pd.DataFrame, threshold_config: dict):
     # --- Apply Rules ---
     fraud_customers = customer_stats[
         (customer_stats['num_refunds'] >= threshold_config["num_refunds"]) |  # Rule 1
@@ -85,7 +122,7 @@ def detect_fraud(customer_stats:pd.DataFrame, threshold_config:dict):
         (customer_stats['refund_to_order_percentage'] >= threshold_config["refund_to_order_percentage"])  # Rule 3
     ]
 
-    fraud_customers = fraud_customers.sort_values(by=["refund_ratio"],ascending=False)  # Sort to show most suspicious customers first.
+    fraud_customers = fraud_customers.sort_values(by=["refund_ratio"], ascending=False)  # Sort to show most suspicious customers first.
 
     return fraud_customers
 
@@ -126,7 +163,7 @@ elif data_source == "Upload CSV":
             'order_amount': [50.00, 75.00, 60.00],
             'refund_request_date': ['', '2024-11-02', ''],
             'refund_amount': [0.00, 25.00, 0.00],
-            'refund_reason': ['', 'Damaged Item', '']
+            'refund_reason': ['', 'Damaged Item', '']  # Added refund_reason
         }
         template_df = pd.DataFrame(template_data)
         csv_template = template_df.to_csv(index=False)
@@ -137,11 +174,9 @@ elif data_source == "Upload CSV":
             mime="text/csv",
         )
         df = pd.DataFrame()  # Ensure df exists even with an error.
-
 else:
     st.error("Invalid data source selection.")
-    df = pd.DataFrame() # Ensure df exists even with an error.
-
+    df = pd.DataFrame()  # Ensure df exists even with an error.
 
 # --- 4. Fraud Detection and Display ---
 if not df.empty:
@@ -153,9 +188,8 @@ if not df.empty:
         "refund_to_order_percentage": st.sidebar.slider("Refunds per Order (%)", 0, 100, 20)
     }
 
-
     # --- Process Data ---
-    df, customer_stats = process_data(df)
+    df, customer_stats, category_counts = process_data(df)  # Get category counts
 
     # --- Detect Fraud ---
     fraud_customers = detect_fraud(customer_stats, threshold_config)
@@ -168,10 +202,17 @@ if not df.empty:
         # Detailed View (for more in-depth analysis)
         customer_id_to_investigate = st.selectbox("Select Customer ID for Details", fraud_customers.index.tolist())
         if customer_id_to_investigate:
-            customer_details = df[df['customer_id'] == customer_id_to_investigate].sort_values(by="order_date",ascending=False) # show most recent first
+            customer_details = df[df['customer_id'] == customer_id_to_investigate].sort_values(by="order_date", ascending=False)  # show most recent first
             st.subheader(f"Customer {customer_id_to_investigate} Order/Refund History")
             st.dataframe(customer_details)
 
+            # Display refund reason counts by category
+            st.subheader("Refund Reason Breakdown")
+            if customer_id_to_investigate in category_counts.index:
+                category_data = category_counts.loc[customer_id_to_investigate]
+                st.bar_chart(category_data)
+            else:
+                st.write("No refund reasons found for this customer.")
 
     else:
         st.success("No suspicious activity detected based on current thresholds.")
