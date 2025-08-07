@@ -278,14 +278,10 @@ elif data_source == "Upload CSV":
         # --- CSV Template Download Option ---
         # Create the template with all columns *except* refund_amount and refund_reason
         template_data = {
-            'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
-            'customer_id': [2446017, 2192296, 2192296],
+            'customer_id': ['2446017', '2192296', '2192296'],
             'order_id': [1175332450, 1175332457, 1175332458],
             'TYPE': ['Subscription', 'Subscription', 'Subscription'],
             'DC_name': ['Ahmedabad-DC', 'Chennai-DC', 'Chennai-DC'],
-            'fc_name': ['Ahmedabad-FV-FMCG-DC', 'Chennai-FV-DC', 'Chennai-FV-DC'],
-            'fc_id': [213, 207, 207],
-            'dark_store': ['Thaltej V2 DS', 'Kelambakkam V2 DS', 'Kelambakkam V2 DS'],
             'category': ['Milk', 'Breakfast, Snacks & Branded Foods', 'Milk'],
             'Hub': ['Thaltej V2 Hub', 'Kelambakkam V2 Hub', 'Kelambakkam V2 Hub'],
             'society_name': ['Shaligram Plush', 'Pacifica Aurum happiness tower', 'Pacifica Aurum happiness tower'],
@@ -293,46 +289,31 @@ elif data_source == "Upload CSV":
             'skuid': [40090894, 40174324, 40151383],
             'brand': ['Amul', 'Britannia', 'Aavin'],
             'product_name': ['Taaza Milk', 'JimJam Flavoured Sandwich Biscuits', 'Pasteurised Standardised Milk'],
-            'pack_size': ['500 ml', '57 g', '500 ml Pouch'],
-            'hsn': ['04012000_a', '19053290_d', '04012000_a'],
-            'GST_percent': [0, 18, 0],
-            'Cess_percent': [0, 0, 0],
-            'sales_without_tax': [56, 8.47, 22],
-            'SGST_Value': [0, 0.76, 0],
-            'CGST_Value': [0, 0.76, 0],
-            'IGST_Value': [0, 0, 0],
-            'CESS_Value': [0, 0, 0],
             'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
             'quantity': [2, 1, 1],
-            'mrp': [28, 10, 22],
-            'cost_price': [24.89, 8.4, 21.53],
-            'selling_price': [28, 10, 22],
-            'sale_value': [56, 10, 22], # Add sale_value
-            'slot_charges': [0, 0, 0],
-            'is_indent': ['N', 'Y', 'N'],
+            'sale_value': [56, 10, 22],
             'refund_comment': ['', '', ''],
             'subscription_id': [9613982, 16113215, 16110043],
             'sales_without_delivery_charge': [56, 10, 22],
             'discount_amount': [0, 0, 0],
             'is_free_coupon_product': [0, 0, 0],
-            'user_source': ['bbDaily', 'bbDaily', 'bbDaily'],
             'delivery_status': [1, 1, 1],
             'society_id': [33535, 7931, 7931],
             'block_name': ['B', 'B', 'B'],
             'tag': ['', '', ''],
             'order_ver': ['v2 orders', 'v2 orders', 'v2 orders'],
             'bb_order_id': [1753822588, 1753785814, 1753785404],
-            'fo_customer': ['N', 'N', 'N'],
-            'cost_price_processed': [0, 8.4, 0]
+            'fo_customer': ['N', 'N', 'N']
         }
 
         template_df = pd.DataFrame(template_data)
         csv_template = template_df.to_csv(index=False, columns=[
-            'Report_date', 'customer_id', 'order_id', 'order_date', 'quantity', 'selling_price',
-            'TYPE', 'DC_name', 'category', 'Hub', 'society_name', 'sub_category', 'skuid',
-            'brand', 'product_name', 'sale_value', 'subscription_id', 'sales_without_delivery_charge',
-            'discount_amount', 'is_free_coupon_product', 'delivery_status', 'society_id',
-            'block_name', 'tag', 'order_ver', 'bb_order_id', 'fo_customer'
+            'customer_id', 'order_id', 'TYPE', 'DC_name', 'category', 'Hub',
+            'society_name', 'sub_category', 'skuid', 'brand', 'product_name',
+            'order_date', 'quantity', 'sale_value', 'refund_comment', 'subscription_id',
+            'sales_without_delivery_charge', 'discount_amount', 'is_free_coupon_product',
+            'delivery_status', 'society_id', 'block_name', 'tag', 'order_ver',
+            'bb_order_id', 'fo_customer',
         ])
         st.download_button(
             label="Download CSV Template",
