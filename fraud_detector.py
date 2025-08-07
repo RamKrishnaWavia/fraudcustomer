@@ -42,7 +42,7 @@ def generate_sample_data():
                 refund_amount = min(refund_amount,selling_price * quantity) # ensure refund amount doesn't exceed order value
                 refund_request_date = order_date + timedelta(days=1)  # Make sure the order is before refund.
                 # Corrected refund reason generation
-                refund_reason = np.random.choice(list(refund_reasons.keys()), p=get_probabilities(refund_reasons)) if refund_amount > 0 else None
+                refund_reason = np.random.choice(list(refund_reasons.keys()), p=get_probabilities(list(refund_reasons.keys()))) if refund_amount > 0 else None
                 refund_comment = "Sample Refund Comment" if refund_reason else None
             else:
                 refund_amount = 0
@@ -94,17 +94,13 @@ refund_reasons = {
 def get_probabilities(reasons):
     """
     Generates a list of probabilities for the given refund reasons.
-    If the number of reasons is less than 23, pads the probabilities to match the expected length
     """
     num_reasons = len(reasons)
     # Define the base probabilities. Adjust these as needed to reflect your data
-    base_probabilities = [0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]  # Updated to 23 items
+    # Changed these to all equal to avoid the problem with the sum not equaling 1.
+    base_probability = 1.0 / num_reasons  # Equal probability for each reason
+    probabilities = [base_probability] * num_reasons
 
-    # Slice the probabilities based on the number of reasons
-    probabilities = base_probabilities[:num_reasons]
-    # Normalize the probabilities.  If the number of reasons isn't 23, we need to normalize to sum to 1.0
-    if sum(probabilities) != 1.0 and sum(probabilities) != 0:  # Handle cases where the sum is not exactly 1.0 (due to slicing) and the list might be empty.
-        probabilities = [p / sum(probabilities) for p in probabilities]
     return probabilities
 
 
