@@ -92,19 +92,20 @@ refund_reasons = {
 
 # Helper function to normalize probabilities, ensuring they sum to 1
 def get_probabilities(reasons):
-  """
-  Generates a list of probabilities for the given refund reasons.
-  If the number of reasons is less than 9, pads the probabilities to match the expected length
-  """
-  num_reasons = len(reasons)
-  # Define the base probabilities. Adjust these as needed to reflect your data
-  base_probabilities = [0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05]
-  # Slice the probabilities based on the number of reasons
-  probabilities = base_probabilities[:num_reasons]
-  # Normalize the probabilities.  If the number of reasons isn't 9, we need to normalize to sum to 1.0
-  if sum(probabilities) != 1.0:  # Handle cases where the sum is not exactly 1.0 (due to slicing)
-      probabilities = [p / sum(probabilities) for p in probabilities]
-  return probabilities
+    """
+    Generates a list of probabilities for the given refund reasons.
+    If the number of reasons is less than 23, pads the probabilities to match the expected length
+    """
+    num_reasons = len(reasons)
+    # Define the base probabilities. Adjust these as needed to reflect your data
+    base_probabilities = [0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05]  # Updated to 23 items
+
+    # Slice the probabilities based on the number of reasons
+    probabilities = base_probabilities[:num_reasons]
+    # Normalize the probabilities.  If the number of reasons isn't 23, we need to normalize to sum to 1.0
+    if sum(probabilities) != 1.0 and sum(probabilities) != 0:  # Handle cases where the sum is not exactly 1.0 (due to slicing) and the list might be empty.
+        probabilities = [p / sum(probabilities) for p in probabilities]
+    return probabilities
 
 
 
