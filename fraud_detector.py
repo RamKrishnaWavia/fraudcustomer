@@ -192,18 +192,22 @@ def process_data(df: pd.DataFrame):
     category_counts = pd.DataFrame()
 
     if not df.empty:
-      customer_stats = df.groupby('customer_id').agg(
-          total_orders=('order_id', 'count'),
-          total_refunds=('amount', 'sum'), #changed to amount
-          num_refunds=('amount', 'count'), # changed to amount
-          total_order_value=('sale_value', 'sum') # use sale value
-      )
-      customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
-      customer_stats['refund_to_order_percentage'] = (customer_stats['num_refunds'] / customer_stats['total_orders']) * 100
+        # Filter the DataFrame to include only rows where 'customer_id' is not null
+        df_filtered = df[df['customer_id'].notna()]
 
-      # Calculate the count for each category of refund reason.
-      if 'refund_category' in df.columns:
-        category_counts = df.groupby(['customer_id', 'refund_category']).size().unstack(fill_value=0)
+        customer_stats = df_filtered.groupby('customer_id').agg(
+            total_orders=('order_id', 'count'),
+            total_refunds=('amount', 'sum'), #changed to amount
+            num_refunds=('amount', 'count'), # changed to amount
+            total_order_value=('sale_value', 'sum') # use sale value
+        )
+        if not customer_stats.empty: # Checking if the aggregation resulted in an empty df.
+            customer_stats['refund_ratio'] = (customer_stats['total_refunds'] / customer_stats['total_order_value']) * 100
+            customer_stats['refund_to_order_percentage'] = (customer_stats['num_refunds'] / customer_stats['total_orders']) * 100
+
+            # Calculate the count for each category of refund reason.
+            if 'refund_category' in df.columns:
+                category_counts = df_filtered.groupby(['customer_id', 'refund_category']).size().unstack(fill_value=0)
 
     return df, customer_stats, category_counts  # Return the category counts
 
@@ -273,35 +277,36 @@ elif data_source == "Upload CSV":
         # --- CSV Template Download Option ---
         # Create the template with all columns *except* refund_amount and refund_reason
         template_data = {
-            'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
-            'customer_id': [2446017, 2192296, 2192296],
-            'sub_id': [12345, 12345, 12345], # Added sub_id
+            'customer_id': ['2446017', '2192296', '2192296'],
             'order_id': [1175332450, 1175332457, 1175332458],
-            'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
-            'Refund_Date': ['', '',''], # added refund date
-            'city': ['Example City','Example City','Example City'],
-            'DC': ['Example DC', 'Example DC', 'Example DC'],
-            'DS': ['Example DS', 'Example DS', 'Example DS'],
-            'hub': ['Example Hub', 'Example Hub', 'Example Hub'],
-            'agent_name': ['Agent Name', 'Agent Name', 'Agent Name'],
-            'role': ['Agent Role', 'Agent Role', 'Agent Role'],
+            'TYPE': ['Subscription', 'Subscription', 'Subscription'],
+            'DC_name': ['Ahmedabad-DC', 'Chennai-DC', 'Chennai-DC'],
+            'category': ['Milk', 'Breakfast, Snacks & Branded Foods', 'Milk'],
+            'Hub': ['Thaltej V2 Hub', 'Kelambakkam V2 Hub', 'Kelambakkam V2 Hub'],
             'society_name': ['Shaligram Plush', 'Pacifica Aurum happiness tower', 'Pacifica Aurum happiness tower'],
-            'block': ['B', 'B', 'B'],
-            'flat_no': ['101', '101', '101'],
-            'customer_name': ['Customer Name', 'Customer Name', 'Customer Name'],
-            'customer_category': ['Regular', 'Regular', 'Regular'],
-            'bbdaily_category': ['Milk', 'Milk', 'Milk'],
+            'sub_category': ['All Milk', 'Biscuits & Cookies', 'All Milk'],
+            'skuid': [40090894, 40174324, 40151383],
             'brand': ['Amul', 'Britannia', 'Aavin'],
-            'product_id': [98765,98765,98765],
-            'product': ['Example Product','Example Product','Example Product'],
-            'pack_size': ['500 ml', '57 g', '500 ml Pouch'],
-            'quantity': [2, 1, 1], # Renamed
-            'selling_price': [28, 10, 22],
+            'product_name': ['Taaza Milk', 'JimJam Flavoured Sandwich Biscuits', 'Pasteurised Standardised Milk'],
+            'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
+            'quantity': [2, 1, 1],
             'sale_value': [56, 10, 22],
             'comment': ['', '', ''],  # Changed to comment = refund reason
-            'cee': ['Y', 'Y', 'Y'],
-            'is_fo_customer': ['Y', 'Y', 'Y'],
+            'subscription_id': [9613982, 16113215, 16110043],
+            'sales_without_delivery_charge': [56, 10, 22],
+            'discount_amount': [0, 0, 0],
+            'is_free_coupon_product': [0, 0, 0],
+            'delivery_status': [1, 1, 1],
+            'society_id': [33535, 7931, 7931],
+            'block_name': ['B', 'B', 'B'],
+            'tag': ['', '', ''],
+            'order_ver': ['v2 orders', 'v2 orders', 'v2 orders'],
+            'bb_order_id': [1753822588, 1753785814, 1753785404],
+            'fo_customer': ['N', 'N', 'N'],
             'amount': [0.00, 0.00, 0.00],  #renamed to amount
+            'sub_id': [12345,12345,12345],
+            'Refund_Date': ['06-08-2025','06-08-2025','06-08-2025']
+
         }
 
         template_df = pd.DataFrame(template_data)
@@ -309,8 +314,7 @@ elif data_source == "Upload CSV":
             'sub_id', 'order_id', 'order_date', 'Refund_Date', 'city', 'DC', 'DS', 'hub',
             'agent_name', 'role', 'society_name', 'block', 'flat_no', 'customer_id',
             'bb_id', 'customer_name', 'customer_category', 'bbdaily_category', 'brand',
-            'product_id', 'product', 'pack_size', 'refund_quantity', 'amount',
-            'comment', 'cee', 'is_fo_customer'
+            'product_id', 'product', 'pack_size', 'quantity', 'selling_price','sale_value', 'comment', 'cee', 'is_fo_customer',
         ])
         st.download_button(
             label="Download CSV Template",
