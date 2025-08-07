@@ -17,7 +17,48 @@ def generate_sample_data():
         'selling_price': [],
         'refund_comment': [],
         'refund_amount': [],
-        'refund_reason': []
+        'refund_reason': [],
+        # Add all the other columns, potentially with dummy data
+        'bb_id': [],  # Example: Add dummy data
+        'TYPE': [],
+        'DC_name': [],
+        'fc_name': [],
+        'fc_id': [],
+        'dark_store': [],
+        'category': [],
+        'Hub': [],
+        'society_name': [],
+        'sub_category': [],
+        'skuid': [],
+        'brand': [],
+        'product_name': [],
+        'pack_size': [],
+        'hsn': [],
+        'GST_percent': [],
+        'Cess_percent': [],
+        'sales_without_tax': [],
+        'SGST_Value': [],
+        'CGST_Value': [],
+        'IGST_Value': [],
+        'CESS_Value': [],
+        'mrp': [],
+        'cost_price': [],
+        'sale_value': [],
+        'slot_charges': [],
+        'is_indent': [],
+        'subscription_id': [],
+        'sales_without_delivery_charge': [],
+        'discount_amount': [],
+        'is_free_coupon_product': [],
+        'user_source': [],
+        'delivery_status': [],
+        'society_id': [],
+        'block_name': [],
+        'tag': [],
+        'order_ver': [],
+        'bb_order_id': [],
+        'fo_customer': [],
+        'cost_price_processed': []
     }
 
     now = datetime.now()
@@ -59,6 +100,48 @@ def generate_sample_data():
             data['refund_comment'].append(refund_comment)
             data['refund_amount'].append(refund_amount)
             data['refund_reason'].append(refund_reason)
+
+            # Add dummy data for the other columns.
+            data['bb_id'].append(12345)  # Example
+            data['TYPE'].append('Subscription')
+            data['DC_name'].append('Example DC')
+            data['fc_name'].append('Example FC')
+            data['fc_id'].append(100)
+            data['dark_store'].append('Example DS')
+            data['category'].append('Example Category')
+            data['Hub'].append('Example Hub')
+            data['society_name'].append('Example Society')
+            data['sub_category'].append('Example Sub')
+            data['skuid'].append(98765)
+            data['brand'].append('Example Brand')
+            data['product_name'].append('Example Product')
+            data['pack_size'].append('Example Pack')
+            data['hsn'].append('12345678')
+            data['GST_percent'].append(5.0)
+            data['Cess_percent'].append(0.0)
+            data['sales_without_tax'].append(selling_price * quantity)  # Example
+            data['SGST_Value'].append(0.0)
+            data['CGST_Value'].append(0.0)
+            data['IGST_Value'].append(0.0)
+            data['CESS_Value'].append(0.0)
+            data['mrp'].append(selling_price + 5)  # Example: MRP is a bit higher.
+            data['cost_price'].append(selling_price - 3) # Example: Cost Price is a bit lower.
+            data['sale_value'].append(selling_price * quantity) # example value, can be computed.
+            data['slot_charges'].append(0.0)
+            data['is_indent'].append('N')
+            data['subscription_id'].append(9999) # example
+            data['sales_without_delivery_charge'].append(selling_price * quantity)
+            data['discount_amount'].append(0.0)
+            data['is_free_coupon_product'].append('N')
+            data['user_source'].append('bbDaily')
+            data['delivery_status'].append('Delivered')
+            data['society_id'].append(123) #example
+            data['block_name'].append('A')
+            data['tag'].append('Example Tag')
+            data['order_ver'].append('v2 orders')
+            data['bb_order_id'].append(1234567890) #example
+            data['fo_customer'].append('Y')
+            data['cost_price_processed'].append(selling_price - 3)
 
     return pd.DataFrame(data)
 
@@ -194,14 +277,55 @@ elif data_source == "Upload CSV":
     else:
         st.warning("Please upload a CSV file or download the template.")
         # --- CSV Template Download Option ---
+        # Create the template with all columns
         template_data = {
             'Report_date': ['07-08-2025', '07-08-2025', '07-08-2025'],
             'customer_id': [2446017, 2192296, 2192296],
+            'bb_id': [10868036, 6265092, 6265092],
             'order_id': [1175332450, 1175332457, 1175332458],
+            'TYPE': ['Subscription', 'Subscription', 'Subscription'],
+            'DC_name': ['Ahmedabad-DC', 'Chennai-DC', 'Chennai-DC'],
+            'fc_name': ['Ahmedabad-FV-FMCG-DC', 'Chennai-FV-DC', 'Chennai-FV-DC'],
+            'fc_id': [213, 207, 207],
+            'dark_store': ['Thaltej V2 DS', 'Kelambakkam V2 DS', 'Kelambakkam V2 DS'],
+            'category': ['Milk', 'Breakfast, Snacks & Branded Foods', 'Milk'],
+            'Hub': ['Thaltej V2 Hub', 'Kelambakkam V2 Hub', 'Kelambakkam V2 Hub'],
+            'society_name': ['Shaligram Plush', 'Pacifica Aurum happiness tower', 'Pacifica Aurum happiness tower'],
+            'sub_category': ['All Milk', 'Biscuits & Cookies', 'All Milk'],
+            'skuid': [40090894, 40174324, 40151383],
+            'brand': ['Amul', 'Britannia', 'Aavin'],
+            'product_name': ['Taaza Milk', 'JimJam Flavoured Sandwich Biscuits', 'Pasteurised Standardised Milk'],
+            'pack_size': ['500 ml', '57 g', '500 ml Pouch'],
+            'hsn': ['04012000_a', '19053290_d', '04012000_a'],
+            'GST_percent': [0, 18, 0],
+            'Cess_percent': [0, 0, 0],
+            'sales_without_tax': [56, 8.47, 22],
+            'SGST_Value': [0, 0.76, 0],
+            'CGST_Value': [0, 0.76, 0],
+            'IGST_Value': [0, 0, 0],
+            'CESS_Value': [0, 0, 0],
             'order_date': ['05-08-2025', '05-08-2025', '05-08-2025'],
             'quantity': [2, 1, 1],
-            'selling_price': [28.00, 10.00, 22.00],
+            'mrp': [28, 10, 22],
+            'cost_price': [24.89, 8.4, 21.53],
+            'selling_price': [28, 10, 22],
+            'sale_value': [56, 10, 22],
+            'slot_charges': [0, 0, 0],
+            'is_indent': ['N', 'Y', 'N'],
             'refund_comment': ['', '', ''],
+            'subscription_id': [9613982, 16113215, 16110043],
+            'sales_without_delivery_charge': [56, 10, 22],
+            'discount_amount': [0, 0, 0],
+            'is_free_coupon_product': [0, 0, 0],
+            'user_source': ['bbDaily', 'bbDaily', 'bbDaily'],
+            'delivery_status': [1, 1, 1],
+            'society_id': [33535, 7931, 7931],
+            'block_name': ['B', 'B', 'B'],
+            'tag': ['', '', ''],
+            'order_ver': ['v2 orders', 'v2 orders', 'v2 orders'],
+            'bb_order_id': [1753822588, 1753785814, 1753785404],
+            'fo_customer': ['N', 'N', 'N'],
+            'cost_price_processed': [0, 8.4, 0],
             'refund_amount': [0.00, 0.00, 0.00],
             'refund_reason': ['', '', '']
         }
