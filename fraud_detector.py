@@ -41,7 +41,8 @@ def generate_sample_data():
                 refund_amount = selling_price * quantity * (0.2 + (0.1 if customer_id < 5 else 0))  # Vary refund amount
                 refund_amount = min(refund_amount,selling_price * quantity) # ensure refund amount doesn't exceed order value
                 refund_request_date = order_date + timedelta(days=1)  # Make sure the order is before refund.
-                refund_reason = np.random.choice(list(refund_reasons.keys()), p = [0.2,0.2,0.1,0.1,0.1,0.1,0.1,0.05,0.05]).title() if refund_amount > 0 else None # select a random refund_reason from the available list
+                # Corrected refund reason generation
+                refund_reason = np.random.choice(list(refund_reasons.keys()), p=get_probabilities(refund_reasons)) if refund_amount > 0 else None
                 refund_comment = "Sample Refund Comment" if refund_reason else None
             else:
                 refund_amount = 0
@@ -88,6 +89,24 @@ refund_reasons = {
     "missing items": "Quantity",
     "Closing the society": "Other"
 }
+
+# Helper function to normalize probabilities, ensuring they sum to 1
+def get_probabilities(reasons):
+  """
+  Generates a list of probabilities for the given refund reasons.
+  If the number of reasons is less than 9, pads the probabilities to match the expected length
+  """
+  num_reasons = len(reasons)
+  # Define the base probabilities. Adjust these as needed to reflect your data
+  base_probabilities = [0.2, 0.2, 0.1, 0.1, 0.1, 0.1, 0.1, 0.05, 0.05]
+  # Slice the probabilities based on the number of reasons
+  probabilities = base_probabilities[:num_reasons]
+  # Normalize the probabilities.  If the number of reasons isn't 9, we need to normalize to sum to 1.0
+  if sum(probabilities) != 1.0:  # Handle cases where the sum is not exactly 1.0 (due to slicing)
+      probabilities = [p / sum(probabilities) for p in probabilities]
+  return probabilities
+
+
 
 # --- 2. Data Processing & Fraud Detection Functions ---
 @st.cache_data  # Use caching to avoid re-processing on every rerun
