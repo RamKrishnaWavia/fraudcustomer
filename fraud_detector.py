@@ -24,11 +24,6 @@ def validate_data(df, required_cols):
         st.error(f"❌ Error converting data types: {e}. Check date and numeric columns.")
         return False
 
-    # Check for missing values
-    if df.isnull().any().any():
-        st.warning("⚠️ Missing values detected.  Rows with missing values will be dropped for processing.")
-        df = df.dropna()  # Or use imputation based on your needs
-
     return df  # Return the (potentially modified) dataframe
 
 
@@ -64,7 +59,7 @@ def generate_ai_insights(df):
     try:
         # Basic Information for the Prompt
         total_refund = df['Refund_Value'].sum()
-        if df['sales_without_delivery_charge'].sum() != 0:
+        if df['sales_without_delivery_charge'].abs().sum() != 0:
             refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2)
         else:
             refund_pct = 0  # Handle the case where the total sales is zero.
@@ -169,10 +164,6 @@ if uploaded_file:
         # --- Summary Cards ---
         total_refund = df["Refund_Value"].sum()
         st.write("Total Refund Value (DEBUG):", total_refund) # Debugging
-        st.write("sales_without_delivery_charge (DEBUG - before calculation):", df["sales_without_delivery_charge"].head())
-        st.write("Refund_Value (DEBUG - before calculation):", df["Refund_Value"].head())
-        st.write("sales_without_delivery_charge - SUM (DEBUG)", df["sales_without_delivery_charge"].sum()) # Add this to help with calculating the refund %
-
         if df['sales_without_delivery_charge'].sum() != 0:
            refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
         else:
