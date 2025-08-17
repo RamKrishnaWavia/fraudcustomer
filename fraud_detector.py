@@ -24,6 +24,11 @@ def validate_data(df, required_cols):
         st.error(f"❌ Error converting data types: {e}. Check date and numeric columns.")
         return False
 
+    # Check for missing values
+    if df.isnull().any().any():
+        st.warning("⚠️ Missing values detected.  Rows with missing values will be dropped for processing.")
+        df = df.dropna()  # Or use imputation based on your needs
+
     return df  # Return the (potentially modified) dataframe
 
 
@@ -59,7 +64,7 @@ def generate_ai_insights(df):
     try:
         # Basic Information for the Prompt
         total_refund = df['Refund_Value'].sum()
-        if df['sales_without_delivery_charge'].abs().sum() != 0:
+        if df['sales_without_delivery_charge'].sum() != 0:
             refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2)
         else:
             refund_pct = 0  # Handle the case where the total sales is zero.
@@ -218,6 +223,32 @@ if uploaded_file:
             st.subheader("🤖 AI Insights & Recommendations")
             insights = generate_ai_insights(df)
             st.write(insights)
+
+        # --- Recommendations Panel ---
+        st.subheader("🚦 Recommendations")
+        # --- Refund Blocking Criteria Suggestions ---
+        st.write("Based on your data, here are some potential refund blocking criteria:")
+        # -- Example Recommendations (Customize These) --
+        if 'product_name' in df.columns:
+            #SKU Recommendation
+            sku_refunds = df.groupby('product_name')['Refund_Value'].sum().reset_index()
+            total_sales_by_sku = df.groupby('product_name')['sales_without_delivery_charge'].sum().reset_index()
+            sku_data = pd.merge(sku_refunds, total_sales_by_sku, on='product_name', how='left')
+            sku_data['refund_percentage'] = (sku_data['Refund_Value'] / sku_data['sales_without_delivery_charge']) * 100
+            high_refund_skus = sku_data[sku_data['refund_percentage'] > 15]
+            if not high_refund_skus.empty:
+                st.markdown("<span style='color:red;'>⚠️ Block SKUs with Refund % > 15%:</span>", unsafe_allow_html=True)
+                for index, row in high_refund_skus.iterrows():
+                   st.write(f"  - Block SKU '{row['product_name']}' (Refund %: {row['refund_percentage']:.2f}%)")
+
+        # Customer Recommendation
+        customer_refunds = df.groupby('Customer_ID')['Refund_Value'].agg(['sum', 'count']).reset_index()
+        customer_refunds.columns = ['Customer_ID', 'Total Refund Value', 'Refund Count']
+        high_refund_customers = customer_refunds[customer_refunds['Refund Count'] > 5]  # Example threshold
+        if not high_refund_customers.empty:
+            st.markdown("<span style='color:red;'>⚠️ Flag Customers with > 5 Refund Requests:</span>", unsafe_allow_html=True)
+            for index, row in high_refund_customers.iterrows():
+               st.write(f"  - Flag Customer ID '{row['Customer_ID']}' (Refund Count: {row['Refund Count']})")
 
         # --- Display Raw Data (Optional) ---
         with st.expander("🗂️ Show Raw Data"):
