@@ -1,299 +1,145 @@
-import io
-import os
-import datetime as dt
-
-import pandas as pd
 import streamlit as st
+import pandas as pd
 import plotly.express as px
+from datetime import timedelta
 
-# PDF export
-from reportlab.lib.pagesizes import A4
-from reportlab.pdfgen import canvas
-from reportlab.lib.units import cm
+# ----------------------------
+# Helper Functions
+# ----------------------------
+def detect_fraud(df):
+    fraud_customers = []
+    today = df['report_date'].max()
 
-# OpenAI (new SDK style)
-try:
-    from openai import OpenAI
-except Exception:
-    OpenAI = None  # graceful fallback if package missing
+    for cust, group in df.groupby('customer_id'):
+        group = group.sort_values('report_date')
 
-# ---------------------------
-# Page Config
-# ---------------------------
-st.set_page_config(page_title="Refund Analyzer (AI)", layout="wide")
-st.title("💸 Refund Analyzer Dashboard (AI)")
+        # Check >=3 refunds in last 30 days
+        recent_refunds = group[group['report_date'] >= (today - timedelta(days=30))]
+        if recent_refunds.shape[0] >= 3:
+            fraud_customers.append(cust)
+            continue
 
-# ---------------------------
-# Template (download)
-# ---------------------------
-TEMPLATE_COLUMNS = [
-    "Report_date","customer_id","bb_id","order_id","TYPE","DC_name","fc_name","fc_id","dark_store",
-    "category","Hub","society_name","sub_category","skuid","brand","product_name","pack_size",
-    "hsn","GST_percent","Cess_percent","sales_without_tax","SGST_Value","CGST_Value","IGST_Value",
-    "CESS_Value","order_date","quantity","mrp","cost_price","selling_price","sale_value",
-    "slot_charges","is_indent","refund_comment","subscription_id","sales_without_delivery_charge",
-    "discount_amount","is_free_coupon_product","user_source","delivery_status","society_id",
-    "block_name","tag","order_ver","bb_order_id","fo_customer","cost_price_processed"
-]
+        # Check for 3 consecutive days refunds
+        dates = group['report_date'].drop_duplicates().sort_values()
+        consec_count = 1
+        for i in range(1, len(dates)):
+            if (dates.iloc[i] - dates.iloc[i-1]).days == 1:
+                consec_count += 1
+                if consec_count >= 3:
+                    fraud_customers.append(cust)
+                    break
+            else:
+                consec_count = 1
 
-with st.sidebar:
-    st.subheader("⬇️ Download Input Template")
-    template_df = pd.DataFrame(columns=TEMPLATE_COLUMNS)
-    bio = io.BytesIO()
-    template_df.to_excel(bio, index=False, sheet_name="Template")
-    bio.seek(0)
-    st.download_button(
-        "📥 Excel Template",
-        data=bio,
-        file_name="refund_analyzer_template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-    st.caption("Fill columns. A row is a refund if `refund_comment` is non-empty; refund value = `sale_value`.")
+    return list(set(fraud_customers))
 
-# ---------------------------
-# File Upload
-# ---------------------------
-st.subheader("📤 Upload Data")
-uploaded = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
 
-def _safe_dt(series):
-    try:
-        return pd.to_datetime(series, errors="coerce", dayfirst=True)
-    except Exception:
-        return pd.to_datetime(series, errors="coerce")
+# ----------------------------
+# Streamlit UI
+# ----------------------------
+st.set_page_config(page_title="Refund Analyzer", layout="wide")
 
-def ai_write(insights_prompt:str) -> str:
-    """Call OpenAI to write insights. Falls back to prompt echo if unavailable."""
-    key = st.secrets.get("OPENAI_API_KEY")
-    if not key or OpenAI is None:
-        return "⚠️ AI key not set. Add `OPENAI_API_KEY` in Streamlit Secrets to enable dynamic insights."
-    try:
-        client = OpenAI(api_key=key)
-        # Use Chat Completions (official) or Responses; here we use chat for wide compatibility.
-        # See OpenAI API reference for details.  # docs: platform.openai.com/docs
-        resp = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role":"system","content":"You are a senior analytics consultant. Be concise, data-driven, and actionable."},
-                {"role":"user","content":insights_prompt}
-            ],
-            temperature=0.2,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        return f"⚠️ AI call failed: {e}"
+st.title("💰 Refund Analyzer with AI Insights")
 
-def export_pdf(title:str, insights:str, recs:str) -> bytes:
-    """Make a minimal PDF with insights + recommendations."""
-    buf = io.BytesIO()
-    c = canvas.Canvas(buf, pagesize=A4)
-    width, height = A4
+# Downloadable template
+with open("refund_template.xlsx", "wb") as f:
+    pd.DataFrame(columns=[
+        "report_date","customer_id","bb_id","order_id","TYPE","DC_name","fc_name","fc_id",
+        "dark_store","category","Hub","society_name","sub_category","skuid","brand",
+        "product_name","pack_size","hsn","GST_percent","Cess_percent","sales_without_tax",
+        "SGST_Value","CGST_Value","IGST_Value","CESS_Value","order_date","quantity","mrp",
+        "cost_price","selling_price","sale_value","slot_charges","is_indent","refund_comment",
+        "subscription_id","sales_without_delivery_charge","discount_amount",
+        "is_free_coupon_product","user_source","delivery_status","society_id","block_name",
+        "tag","order_ver","bb_order_id","fo_customer","cost_price_processed"
+    ]).to_excel(f, index=False)
 
-    def draw_wrapped(text, x, y, max_width):
-        from reportlab.pdfbase.pdfmetrics import stringWidth
-        lines = []
-        for para in text.split("\n"):
-            words = para.split(" ")
-            line = ""
-            for w in words:
-                test = (line + " " + w).strip()
-                if stringWidth(test, "Helvetica", 10) <= max_width:
-                    line = test
-                else:
-                    lines.append(line)
-                    line = w
-            lines.append(line)
-        for ln in lines:
-            c.drawString(x, y, ln)
-            y -= 12
-            if y < 2*cm:
-                c.showPage(); y = height - 2.5*cm
-        return y
+st.download_button(
+    label="📥 Download Input Template",
+    data=open("refund_template.xlsx", "rb").read(),
+    file_name="refund_template.xlsx"
+)
 
-    # Header
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(2*cm, height - 2.5*cm, title)
-    c.setFont("Helvetica", 9)
-    c.drawString(2*cm, height - 3.1*cm, f"Generated: {dt.datetime.now().strftime('%Y-%m-%d %H:%M')}")
+uploaded_file = st.file_uploader("Upload Refund Data (Excel)", type=["xlsx"])
 
-    y = height - 4.2*cm
-    c.setFont("Helvetica-Bold", 12); c.drawString(2*cm, y, "AI Insights"); y -= 16
-    c.setFont("Helvetica", 10); y = draw_wrapped(insights, 2*cm, y, width - 4*cm)
+if uploaded_file:
+    df = pd.read_excel(uploaded_file)
 
-    y -= 8
-    c.setFont("Helvetica-Bold", 12); c.drawString(2*cm, y, "Recommendations"); y -= 16
-    c.setFont("Helvetica", 10); y = draw_wrapped(recs, 2*cm, y, width - 4*cm)
+    # Preprocess dates
+    df['report_date'] = pd.to_datetime(df['report_date'], errors='coerce')
+    df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
 
-    c.showPage(); c.save()
-    buf.seek(0)
-    return buf.getvalue()
+    # Refund value
+    df['refund_value'] = df.apply(lambda x: x['sales_without_delivery_charge'] if pd.notnull(x['refund_comment']) else 0, axis=1)
 
-if not uploaded:
-    st.info("Upload the Excel file to start.")
-else:
-    # ---------------------------
-    # Load & Prepare
-    # ---------------------------
-    df = pd.read_excel(uploaded)
-    # Normalize likely datetime columns
-    for col in ["Report_date","order_date"]:
-        if col in df.columns:
-            df[col] = _safe_dt(df[col])
+    # Metrics
+    total_refund_value = df['refund_value'].sum()
+    refund_orders = df[df['refund_value'] > 0].shape[0]
+    total_orders = df.shape[0]
+    refund_pct = (refund_orders / total_orders * 100) if total_orders > 0 else 0
+    total_refund_days = df[df['refund_value'] > 0]['report_date'].nunique()
+    top_refund_sku = df.groupby('skuid')['refund_value'].sum().idxmax() if refund_orders > 0 else "N/A"
 
-    # Refund flag & value
-    df["is_refund"] = df["refund_comment"].astype(str).str.strip().ne("") & df["refund_comment"].notna()
-    df["refund_value"] = df["sale_value"].where(df["is_refund"], 0)
+    # Fraud detection
+    fraud_customers = detect_fraud(df)
+    high_risk_count = len(fraud_customers)
 
-    refund_df = df[df["is_refund"]].copy()
-
-    # ---------------------------
+    # ----------------------------
     # Summary Cards
-    # ---------------------------
-    total_orders = len(df)
-    total_refund_orders = len(refund_df)
-    total_refund_value = float(refund_df["refund_value"].sum())
-    refund_percent_of_orders = (total_refund_orders / total_orders * 100) if total_orders else 0.0
-    refund_days = refund_df["Report_date"].dt.date.nunique() if "Report_date" in refund_df else 0
-    top_sku_row = refund_df.groupby(["product_name","skuid"], dropna=False)["refund_value"].sum().sort_values(ascending=False).head(1)
-    if len(top_sku_row) > 0:
-        (top_prod, top_sku), top_val = top_sku_row.index[0], float(top_sku_row.iloc[0])
-        top_sku_label = f"{top_prod} (SKU {top_sku}) – ₹{top_val:,.0f}"
-    else:
-        top_sku_label = "N/A"
-    # High-risk customers: refund% > 20% and >= 3 refunds (tweakable)
-    cust_agg = refund_df.groupby("customer_id").agg(
-        refunds=("refund_value","sum"),
-        refund_count=("refund_value","size"),
-    ).merge(
-        df.groupby("customer_id").agg(total_spend=("sale_value","sum")), left_index=True, right_index=True, how="left"
-    )
-    cust_agg["refund_pct_value"] = (cust_agg["refunds"] / cust_agg["total_spend"].replace(0, pd.NA))*100
-    high_risk = cust_agg[(cust_agg["refund_count"]>=3) & (cust_agg["refund_pct_value"]>=20)].shape[0]
+    # ----------------------------
+    st.subheader("📊 Refund Summary")
+    col1, col2, col3, col4, col5 = st.columns(5)
+    col1.metric("Total Refund Value (₹)", f"{total_refund_value:,.2f}")
+    col2.metric("Refund % of Orders", f"{refund_pct:.2f}%")
+    col3.metric("Total Refund Days", total_refund_days)
+    col4.metric("Top Refund SKU", top_refund_sku)
+    col5.metric("High-Risk Customers", high_risk_count)
 
-    c1,c2,c3,c4,c5 = st.columns(5)
-    c1.metric("💰 Total Refund Value", f"₹{total_refund_value:,.0f}")
-    c2.metric("📊 Refund % of Orders", f"{refund_percent_of_orders:.2f}%")
-    c3.metric("📅 Total Refund Days", f"{refund_days}")
-    c4.metric("🥭 Top Refund SKU", top_sku_label)
-    c5.metric("👤 High-Risk Customers", f"{high_risk}")
+    # ----------------------------
+    # Charts
+    # ----------------------------
+    st.subheader("📈 Refund Analysis Charts")
 
-    st.divider()
+    chart_tabs = st.tabs(["By Hub", "By Dark Store", "By Category", "By Society ID", "Fraud Customers"])
 
-    # ---------------------------
-    # Charts (tabs)
-    # ---------------------------
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["🏘 Society", "🏢 Hub", "🏬 Dark Store", "🏷 Category", "🚨 Fraud Customers"]
-    )
-
-    def bar(df_, x, y, title):
-        fig = px.bar(df_.sort_values(y, ascending=False), x=x, y=y, title=title)
+    with chart_tabs[0]:
+        fig = px.bar(df.groupby('Hub')['refund_value'].sum().reset_index(), x="Hub", y="refund_value", title="Refund Value by Hub")
         st.plotly_chart(fig, use_container_width=True)
 
-    with tab1:
-        grp = refund_df.groupby("society_id", dropna=False)["refund_value"].sum().reset_index()
-        bar(grp, "society_id", "refund_value", "Refund Value by Society")
+    with chart_tabs[1]:
+        fig = px.bar(df.groupby('dark_store')['refund_value'].sum().reset_index(), x="dark_store", y="refund_value", title="Refund Value by Dark Store")
+        st.plotly_chart(fig, use_container_width=True)
 
-    with tab2:
-        grp = refund_df.groupby("Hub", dropna=False)["refund_value"].sum().reset_index()
-        bar(grp, "Hub", "refund_value", "Refund Value by Hub")
+    with chart_tabs[2]:
+        fig = px.bar(df.groupby('category')['refund_value'].sum().reset_index(), x="category", y="refund_value", title="Refund Value by Category")
+        st.plotly_chart(fig, use_container_width=True)
 
-    with tab3:
-        grp = refund_df.groupby("dark_store", dropna=False)["refund_value"].sum().reset_index()
-        bar(grp, "dark_store", "refund_value", "Refund Value by Dark Store")
+    with chart_tabs[3]:
+        fig = px.bar(df.groupby('society_id')['refund_value'].sum().reset_index(), x="society_id", y="refund_value", title="Refund Value by Society ID")
+        st.plotly_chart(fig, use_container_width=True)
 
-    with tab4:
-        grp = refund_df.groupby("category", dropna=False)["refund_value"].sum().reset_index()
-        bar(grp, "category", "refund_value", "Refund Value by Category")
+    with chart_tabs[4]:
+        fraud_df = df[df['customer_id'].isin(fraud_customers)]
+        if fraud_df.empty:
+            st.success("✅ No fraud customers detected based on current rules.")
+        else:
+            fig = px.histogram(fraud_df, x="customer_id", y="refund_value", histfunc="sum", title="Fraud Customers Refund Value")
+            st.plotly_chart(fig, use_container_width=True)
 
-    with tab5:
-        fraud_top = refund_df.groupby("customer_id")["refund_value"].sum().nlargest(10).reset_index()
-        bar(fraud_top, "customer_id", "refund_value", "Top 10 High-Refund Customers")
-
-    st.divider()
-
-    # ---------------------------
-    # AI Insights + Recommendations (dynamic)
-    # ---------------------------
+    # ----------------------------
+    # AI Insights + Recommendations
+    # ----------------------------
     st.subheader("🤖 AI Insights")
-    # Build a compact summary for the model
-    def df_head_to_text(df_, n=10):
-        return df_.head(n).to_string(index=False)
+    st.text_area("AI Observations", 
+                 f"- Refund % is {refund_pct:.2f}%.\n"
+                 f"- High-risk customers detected: {high_risk_count}.\n"
+                 f"- SKU {top_refund_sku} contributes most refunds.\n"
+                 f"- Refunds spread across {total_refund_days} days.")
 
-    prompt = f"""
-You are analyzing a grocery subscription/city logistics refund dataset.
-
-Key metrics:
-- Total orders: {total_orders}
-- Refund orders: {total_refund_orders}
-- Refund % of orders: {refund_percent_of_orders:.2f}%
-- Total refund value (INR): {total_refund_value:,.0f}
-- Refund days (unique Report_date): {refund_days}
-- Top refund SKU: {top_sku_label}
-- High-risk customers (>=3 refunds & >=20% refund value share): {high_risk}
-
-Top aggregations (value in INR):
-- By Category:
-{refund_df.groupby('category', dropna=False)['refund_value'].sum().sort_values(ascending=False).head(10).to_string()}
-
-- By Hub:
-{refund_df.groupby('Hub', dropna=False)['refund_value'].sum().sort_values(ascending=False).head(10).to_string()}
-
-- By Dark Store:
-{refund_df.groupby('dark_store', dropna=False)['refund_value'].sum().sort_values(ascending=False).head(10).to_string()}
-
-- By Society:
-{refund_df.groupby('society_id', dropna=False)['refund_value'].sum().sort_values(ascending=False).head(10).to_string()}
-
-Write:
-1) 5 crisp insights (with % deltas or comparisons where useful).
-2) 5 actionable recommendations (blocking criteria, SKU audits, ops fixes).
-Keep it concise. Avoid boilerplate.
-"""
-
-    insights_md = ai_write(prompt)
-    st.markdown(insights_md)
-
-    st.subheader("✅ Recommendations Panel")
-    recs_md = ai_write(
-        "From the same data context, list 6 pragmatic actions ordered by ROI to reduce refunds next week. Be specific (thresholds, owners, timelines)."
-    )
-    st.markdown(recs_md)
-
-    # ---------------------------
-    # Exports: PDF + Excel
-    # ---------------------------
-    st.divider()
-    st.subheader("⬇️ Download Reports")
-
-    # Excel package of key tables
-    excel_buf = io.BytesIO()
-    with pd.ExcelWriter(excel_buf, engine="xlsxwriter") as xl:
-        df.to_excel(xl, index=False, sheet_name="All_Data")
-        refund_df.to_excel(xl, index=False, sheet_name="Refund_Only")
-        refund_df.groupby("category")["refund_value"].sum().reset_index().to_excel(xl, index=False, sheet_name="By_Category")
-        refund_df.groupby("Hub")["refund_value"].sum().reset_index().to_excel(xl, index=False, sheet_name="By_Hub")
-        refund_df.groupby("dark_store")["refund_value"].sum().reset_index().to_excel(xl, index=False, sheet_name="By_DarkStore")
-        refund_df.groupby("society_id")["refund_value"].sum().reset_index().to_excel(xl, index=False, sheet_name="By_Society")
-        refund_df.groupby("customer_id")["refund_value"].sum().reset_index().to_excel(xl, index=False, sheet_name="By_Customer")
-    excel_buf.seek(0)
-    st.download_button(
-        "📊 Download Excel Pack",
-        data=excel_buf,
-        file_name=f"refund_report_{dt.date.today().isoformat()}.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-
-    # PDF (insights + recommendations)
-    pdf_bytes = export_pdf(
-        title="Refund Analyzer — AI Insights",
-        insights=insights_md,
-        recs=recs_md
-    )
-    st.download_button(
-        "🧾 Download Insights PDF",
-        data=pdf_bytes,
-        file_name=f"refund_insights_{dt.date.today().isoformat()}.pdf",
-        mime="application/pdf"
-    )
-
+    st.subheader("💡 Recommendations Panel")
+    st.write("""
+    - 🚦 Apply **blocking criteria** for customers with ≥3 refunds in last 30 days.  
+    - 🚫 Flag customers refunding for **3 consecutive days**.  
+    - 📦 Investigate top refund SKUs for packaging/delivery issues.  
+    - 🏢 Deep dive into hubs/dark stores with consistently higher refund %.  
+    """)
