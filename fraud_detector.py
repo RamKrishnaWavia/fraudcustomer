@@ -65,7 +65,7 @@ def generate_ai_insights(df):
         # Basic Information for the Prompt
         total_refund = df['Refund_Value'].sum()
         if df['sales_without_delivery_charge'].abs().sum() != 0:
-            refund_pct = round((df["Refund_Value"].abs().sum() / df["sales_without_delivery_charge"].sum())*100, 2)
+            refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2)
         else:
             refund_pct = 0  # Handle the case where the total sales is zero.
         unique_customers = df['Customer_ID'].nunique()
@@ -152,7 +152,8 @@ if uploaded_file:
 
         # --- Calculate Refund_Value based on refund_comment---
         if "refund_comment" in df.columns:
-           df["Refund_Value"] = df["sales_without_delivery_charge"] * -1 # Multiplied by -1
+           df["Refund_Value"] = df["sales_without_delivery_charge"]
+           df = df[df["refund_comment"].notna()] #remove the cases where the comment is empty.
         else:
            df["Refund_Value"] = 0  # Or handle the case where refund_comment is missing
 
@@ -168,8 +169,8 @@ if uploaded_file:
         # --- Summary Cards ---
         total_refund = df["Refund_Value"].sum()
         st.write("Total Refund Value (DEBUG):", total_refund) # Debugging
-        if df['sales_without_delivery_charge'].abs().sum() != 0:
-           refund_pct = round((df["Refund_Value"].abs().sum() / df["sales_without_delivery_charge"].sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
+        if df['sales_without_delivery_charge'].sum() != 0:
+           refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
         else:
             refund_pct = 0 # Handle the case where the total sales is zero.
         total_days = df["Refund_Date"].nunique()
