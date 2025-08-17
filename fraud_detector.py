@@ -64,7 +64,10 @@ def generate_ai_insights(df):
     try:
         # Basic Information for the Prompt
         total_refund = df['Refund_Value'].sum()
-        refund_pct = round((df['Refund_Value'].sum()/df['sales_without_delivery_charge'].sum())*100,2) #Use sales_without_delivery_charge
+        if df['sales_without_delivery_charge'].abs().sum() != 0:
+            refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].abs().sum())*100, 2)
+        else:
+            refund_pct = 0  # Handle the case where the total sales is zero.
         unique_customers = df['Customer_ID'].nunique()
         highest_refund_date = df.groupby('Refund_Date')['Refund_Value'].sum().idxmax()
         highest_refund_date_value = df.groupby('Refund_Date')['Refund_Value'].sum().max()
@@ -149,10 +152,7 @@ if uploaded_file:
 
         # --- Calculate Refund_Value based on refund_comment---
         if "refund_comment" in df.columns:
-           st.write("Before Refund Value Calculation, sales_without_delivery_charge: ", df["sales_without_delivery_charge"].head())
-           st.write("Before Refund Value Calculation, refund_comment: ", df["refund_comment"].head())
-           df["Refund_Value"] = df.apply(lambda row: row["sales_without_delivery_charge"] * -1 if pd.notna(row["refund_comment"]) else row["sales_without_delivery_charge"], axis=1) # Multiplied by -1
-           st.write("After Refund Value Calculation, Refund_Value: ", df["Refund_Value"].head())
+           df["Refund_Value"] = df.apply(lambda row: row["sales_without_delivery_charge"] * -1 if pd.notna(row["refund_comment"]) else 0, axis=1) # Multiplied by -1
         else:
            df["Refund_Value"] = 0  # Or handle the case where refund_comment is missing
 
@@ -164,6 +164,7 @@ if uploaded_file:
 
         fraud_df = df[df["Customer_ID"].isin(fraud_customers)].groupby("Customer_ID", as_index=False)["Refund_Value"].sum()
 
+        # --- Summary Cards ---
         # --- Summary Cards ---
         total_refund = df["Refund_Value"].sum()
         st.write("Total Refund Value (DEBUG):", total_refund) # Debugging
