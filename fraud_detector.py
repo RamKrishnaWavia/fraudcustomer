@@ -29,11 +29,6 @@ def validate_data(df, required_cols):
         st.warning("⚠️ Missing values detected.  Rows with missing values will be dropped for processing.")
         df = df.dropna()  # Or use imputation based on your needs
 
-    #Validate Values
-    if (df['sales_without_delivery_charge'] <= 0).any():
-        st.warning("⚠️ Negative or zero 'sales_without_delivery_charge' values found.  These will be filtered out.")
-        df = df[df['sales_without_delivery_charge'] > 0]
-
     return df  # Return the (potentially modified) dataframe
 
 
@@ -63,7 +58,7 @@ def generate_ai_insights(df):
     try:
         # Basic Information for the Prompt
         total_refund = df['Refund_Value'].sum()
-        refund_pct = round((df['Refund_Value'].sum()/df['sales_without_delivery_charge'].sum())*100,2)
+        refund_pct = round((df['Refund_Value'].sum()/df['sales_without_delivery_charge'].sum())*100,2) #Use sales_without_delivery_charge
         unique_customers = df['Customer_ID'].nunique()
         highest_refund_date = df.groupby('Refund_Date')['Refund_Value'].sum().idxmax()
         highest_refund_date_value = df.groupby('Refund_Date')['Refund_Value'].sum().max()
@@ -127,14 +122,15 @@ if uploaded_file:
         st.stop() # Stop execution if there's a file loading issue.
 
     # --- Data Validation and Preprocessing ---
-    required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge"]
+    required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge", "refund_comment"] #Now required_cols has refund_comment
 
     # --- **Column Renaming (if needed)** ---
     # Only rename columns *before* validating the data.
     rename_dict = {
         "customer_id": "Customer_ID",  # Rename "customer_id" to "Customer_ID"
         "order_date": "order_date",  #No change needed
-        "sales_without_delivery_charge": "sales_without_delivery_charge" #No change needed
+        "sales_without_delivery_charge": "sales_without_delivery_charge", #No change needed
+        "refund_comment": "refund_comment" # no change needed
     }
     df = df.rename(columns=rename_dict)
 
@@ -142,9 +138,11 @@ if uploaded_file:
 
     if df is not False:  #Proceed only if validation is successful
 
-        # Rename and calculate
-        df["Refund_Date"] = pd.to_datetime(df["order_date"])
-        df["Refund_Value"] = df["sales_without_delivery_charge"]
+        # --- Calculate Refund_Value based on refund_comment---
+        if "refund_comment" in df.columns:
+           df["Refund_Value"] = df.apply(lambda row: row["sales_without_delivery_charge"] if pd.notna(row["refund_comment"]) else 0, axis=1)
+        else:
+           df["Refund_Value"] = 0  # Or handle the case where refund_comment is missing
 
         # --- Fraud Detection (with configurable thresholds) ---
         with st.expander("⚙️ Fraud Detection Settings"):
@@ -156,7 +154,7 @@ if uploaded_file:
 
         # --- Summary Cards ---
         total_refund = df["Refund_Value"].sum()
-        refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2)
+        refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
         total_days = df["Refund_Date"].nunique()
         top_sku = "N/A"  # Placeholder (add if SKU data present)
         high_risk_count = len(fraud_customers)
