@@ -24,11 +24,6 @@ def validate_data(df, required_cols):
         st.error(f"❌ Error converting data types: {e}. Check date and numeric columns.")
         return False
 
-    # Check for missing values
-    if df.isnull().any().any():
-        st.warning("⚠️ Missing values detected.  Rows with missing values will be dropped for processing.")
-        df = df.dropna()  # Or use imputation based on your needs
-
     return df  # Return the (potentially modified) dataframe
 
 
@@ -152,8 +147,8 @@ if uploaded_file:
 
         # --- Calculate Refund_Value based on refund_comment---
         if "refund_comment" in df.columns:
-           df["Refund_Value"] = df["sales_without_delivery_charge"]
            df = df[df["refund_comment"].notna()] #remove the cases where the comment is empty.
+           df["Refund_Value"] = df["sales_without_delivery_charge"]
         else:
            df["Refund_Value"] = 0  # Or handle the case where refund_comment is missing
 
