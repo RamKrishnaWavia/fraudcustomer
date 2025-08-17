@@ -2,90 +2,93 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 
-# --------------------------
-# Streamlit Page Config
-# --------------------------
+# ---------------------------
+# Page Config
+# ---------------------------
 st.set_page_config(page_title="Refund Analyzer", layout="wide")
 
-st.title("📊 Refund Analyzer Dashboard")
+st.title("💸 Refund Analyzer Dashboard")
 
-# --------------------------
+# ---------------------------
 # File Upload
-# --------------------------
-uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
+# ---------------------------
+uploaded_file = st.file_uploader("📂 Upload Refund Data (Excel)", type=["xlsx"])
+
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
 
-    # Ensure date formatting
-    if 'order_date' in df.columns:
-        df['order_date'] = pd.to_datetime(df['order_date'], errors='coerce')
+    # Refund value calculation
+    df["refund_value"] = df.apply(
+        lambda row: row["sale_value"] if pd.notna(row["refund_comment"]) else 0,
+        axis=1,
+    )
 
-    # Refund filtering: if refund_comment is not empty/null
-    df['is_refund'] = df['refund_comment'].notna() & (df['refund_comment'].astype(str).str.strip() != "")
-    df_refund = df[df['is_refund']].copy()
-
-    # Refund value = sale_value
-    df_refund['refund_value'] = df_refund['sale_value']
-
-    # --------------------------
-    # KPIs
-    # --------------------------
+    # ---------------------------
+    # Summary Metrics
+    # ---------------------------
     total_orders = len(df)
-    total_refunds = len(df_refund)
-    total_sales = df['sale_value'].sum()
-    total_refund_value = df_refund['refund_value'].sum()
-    refund_percent = (total_refund_value / total_sales * 100) if total_sales > 0 else 0
+    total_refund_value = df["refund_value"].sum()
+    refund_orders = df[df["refund_value"] > 0].shape[0]
+    refund_percent = round((refund_orders / total_orders) * 100, 2) if total_orders > 0 else 0
+    total_refund_days = df[df["refund_value"] > 0]["order_date"].nunique()
+    top_refund_sku = df.groupby("skuid")["refund_value"].sum().sort_values(ascending=False).head(1)
+    high_risk_customers = df.groupby("customer_id")["refund_value"].sum()
+    high_risk_customers = high_risk_customers[high_risk_customers > high_risk_customers.mean()].count()
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Orders", f"{total_orders:,}")
-    col2.metric("Refund Orders", f"{total_refunds:,}")
-    col3.metric("Total Refund Value", f"₹{total_refund_value:,.0f}")
-    col4.metric("Refund % of Sales", f"{refund_percent:.2f}%")
+    # Display Summary Cards
+    st.subheader("📊 Summary Stats")
+    col1, col2, col3, col4, col5 = st.columns(5)
 
-    st.divider()
+    col1.metric("💰 Total Refund Value", f"₹{total_refund_value:,.0f}")
+    col2.metric("📉 Refund % of Orders", f"{refund_percent}%")
+    col3.metric("📅 Refund Days", f"{total_refund_days}")
+    col4.metric("🥛 Top Refund SKU", f"{top_refund_sku.index[0]} (₹{top_refund_sku.values[0]:,.0f})" if not top_refund_sku.empty else "N/A")
+    col5.metric("👤 High-Risk Customers", f"{high_risk_customers}")
 
-    # --------------------------
-    # Pareto: Refund by Society
-    # --------------------------
-    st.subheader("🏠 Refunds by Society")
+    # ---------------------------
+    # Multiple Chart Views
+    # ---------------------------
+    st.subheader("📈 Refund Analysis by Dimension")
 
-    society_group = df_refund.groupby("society_id", as_index=False)['refund_value'].sum()
-    society_group = society_group.sort_values(by="refund_value", ascending=False)
-    society_group['cumperc'] = 100 * society_group['refund_value'].cumsum() / society_group['refund_value'].sum()
+    chart_option = st.selectbox("Select Dimension:", ["Hub", "dark_store", "category", "society_id"])
 
-    fig, ax = plt.subplots(figsize=(10,5))
-    ax.bar(society_group['society_id'].astype(str), society_group['refund_value'])
-    ax2 = ax.twinx()
-    ax2.plot(society_group['society_id'].astype(str), society_group['cumperc'], color="red", marker="o")
-
-    ax.set_title("Pareto - Refund Value by Society")
+    fig, ax = plt.subplots()
+    df.groupby(chart_option)["refund_value"].sum().sort_values(ascending=False).plot(kind="bar", ax=ax)
     ax.set_ylabel("Refund Value (₹)")
-    ax2.set_ylabel("Cumulative %")
-    ax.tick_params(axis='x', rotation=45)
+    ax.set_title(f"Refunds by {chart_option}")
     st.pyplot(fig)
 
-    st.dataframe(society_group.head(20))  # show top 20 societies
+    # Fraud Customer Chart
+    st.subheader("🚨 Potential Fraud Customers")
+    fraud_customers = df.groupby("customer_id")["refund_value"].sum().sort_values(ascending=False).head(10)
+    fig2, ax2 = plt.subplots()
+    fraud_customers.plot(kind="bar", ax=ax2, color="red")
+    ax2.set_ylabel("Refund Value (₹)")
+    ax2.set_title("Top 10 High Refund Customers")
+    st.pyplot(fig2)
 
-    st.divider()
+    # ---------------------------
+    # AI Insights Section
+    # ---------------------------
+    st.subheader("🤖 AI Insights")
+    insights = f"""
+    - Refunds are concentrated in **{chart_option}** with highest losses.  
+    - Refund percentage of orders is **{refund_percent}%**, which is {"high 🚨" if refund_percent > 5 else "under control ✅"}.  
+    - SKU `{top_refund_sku.index[0] if not top_refund_sku.empty else "N/A"}` is driving majority of refund cost.  
+    - Identified **{high_risk_customers} high-risk customers** who may need blocking or closer monitoring.  
+    """
+    st.text_area("AI Analysis", insights, height=150)
 
-    # --------------------------
-    # Pareto: Refund by Reason
-    # --------------------------
-    st.subheader("💬 Refunds by Reason")
-
-    reason_group = df_refund.groupby("refund_comment", as_index=False)['refund_value'].sum()
-    reason_group = reason_group.sort_values(by="refund_value", ascending=False)
-    reason_group['cumperc'] = 100 * reason_group['refund_value'].cumsum() / reason_group['refund_value'].sum()
-
-    fig, ax = plt.subplots(figsize=(10,5))
-    ax.bar(reason_group['refund_comment'].astype(str), reason_group['refund_value'])
-    ax2 = ax.twinx()
-    ax2.plot(reason_group['refund_comment'].astype(str), reason_group['cumperc'], color="red", marker="o")
-
-    ax.set_title("Pareto - Refund Value by Reason")
-    ax.set_ylabel("Refund Value (₹)")
-    ax2.set_ylabel("Cumulative %")
-    ax.tick_params(axis='x', rotation=90)
-    st.pyplot(fig)
-
-    st.dataframe(reason_group.head(20))  # show top 20 refund reasons
+    # ---------------------------
+    # Recommendations Panel
+    # ---------------------------
+    st.subheader("🛠 Recommendations Panel")
+    recommendations = [
+        "📌 Block customers crossing refund % threshold (e.g., > 5% of their orders).",
+        "🔍 Investigate Top Refund SKU root causes (quality, packaging, delivery delays).",
+        "🚦 Apply Refund Blocking Criteria: Red = >₹250 & >3 Refund Days, Yellow = Moderate, Green = Safe.",
+        "🏷 Track refunds by Hub & Dark Store to isolate operational issues.",
+        "🤝 Educate customers on proper storage/handling for Milk & FMCG to reduce claims."
+    ]
+    for rec in recommendations:
+        st.write(f"- {rec}")
