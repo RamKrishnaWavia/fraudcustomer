@@ -34,23 +34,29 @@ def validate_data(df, required_cols):
 
 def detect_fraud_customers(df, refund_threshold=3, consecutive_days_threshold=2):
     """Detects fraudulent customers based on refund patterns."""
-    fraud_customers = []
+    #Added a try/except block, just in case there is any other error
+    try:
+        fraud_customers = []
 
-    # Rule 1: ≥ refund_threshold refunds in last 30 days
-    last_30 = df[df['Refund_Date'] >= (df['Refund_Date'].max() - pd.Timedelta(days=30))]
-    refunds_30 = last_30.groupby("Customer_ID").size()
-    fraud_customers += refunds_30[refunds_30 >= refund_threshold].index.tolist()
+        # Rule 1: ≥ refund_threshold refunds in last 30 days
+        if 'Refund_Date' in df.columns: #Make sure the column exists first.
+            last_30 = df[df['Refund_Date'] >= (df['Refund_Date'].max() - pd.Timedelta(days=30))]
+            refunds_30 = last_30.groupby("Customer_ID").size()
+            fraud_customers += refunds_30[refunds_30 >= refund_threshold].index.tolist()
 
-    # Rule 2: Refunds for consecutive_days_threshold consecutive days
-    daily_refunds = df.groupby(["Customer_ID", "Refund_Date"]).size().reset_index(name="count")
-    for cust, grp in daily_refunds.groupby("Customer_ID"):
-        grp = grp.sort_values("Refund_Date")
-        grp["consec"] = (grp["Refund_Date"].diff().dt.days == 1).astype(int)
-        grp["streak"] = grp["consec"].groupby((grp["consec"] != grp["consec"].shift()).cumsum()).cumsum()
-        if (grp["streak"] >= consecutive_days_threshold).any():
-            fraud_customers.append(cust)
+        # Rule 2: Refunds for consecutive_days_threshold consecutive days
+        daily_refunds = df.groupby(["Customer_ID", "Refund_Date"]).size().reset_index(name="count")
+        for cust, grp in daily_refunds.groupby("Customer_ID"):
+            grp = grp.sort_values("Refund_Date")
+            grp["consec"] = (grp["Refund_Date"].diff().dt.days == 1).astype(int)
+            grp["streak"] = grp["consec"].groupby((grp["consec"] != grp["consec"].shift()).cumsum()).cumsum()
+            if (grp["streak"] >= consecutive_days_threshold).any():
+                fraud_customers.append(cust)
 
-    return list(set(fraud_customers))
+        return list(set(fraud_customers))
+    except Exception as e:
+        st.error(f"An error occurred inside detect_fraud_customers: {e}")
+        return [] # Return an empty list to avoid further errors.
 
 
 def generate_ai_insights(df):
@@ -137,6 +143,8 @@ if uploaded_file:
     df = validate_data(df, required_cols)
 
     if df is not False:  #Proceed only if validation is successful
+        # --- Create the `Refund_Date` column, before calling the function.
+        df["Refund_Date"] = pd.to_datetime(df["order_date"])  # <--- MOVE THIS UP HERE
 
         # --- Calculate Refund_Value based on refund_comment---
         if "refund_comment" in df.columns:
