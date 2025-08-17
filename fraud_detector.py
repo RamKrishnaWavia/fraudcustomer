@@ -24,11 +24,6 @@ def validate_data(df, required_cols):
         st.error(f"❌ Error converting data types: {e}. Check date and numeric columns.")
         return False
 
-    # Check for missing values
-    if df.isnull().any().any():
-        st.warning("⚠️ Missing values detected.  Rows with missing values will be dropped for processing.")
-        df = df.dropna()  # Or use imputation based on your needs
-
     return df  # Return the (potentially modified) dataframe
 
 
@@ -148,7 +143,7 @@ if uploaded_file:
 
         # --- Calculate Refund_Value based on refund_comment---
         if "refund_comment" in df.columns:
-           df["Refund_Value"] = df.apply(lambda row: row["sales_without_delivery_charge"] if pd.notna(row["refund_comment"]) else 0, axis=1)
+           df["Refund_Value"] = df.apply(lambda row: row["sales_without_delivery_charge"] * -1 if pd.notna(row["refund_comment"]) else row["sales_without_delivery_charge"], axis=1) # Multiplied by -1
         else:
            df["Refund_Value"] = 0  # Or handle the case where refund_comment is missing
 
@@ -162,116 +157,52 @@ if uploaded_file:
 
         # --- Summary Cards ---
         total_refund = df["Refund_Value"].sum()
-        refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
+        refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].abs().sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
         total_days = df["Refund_Date"].nunique()
-        top_sku = "N/A"  # Placeholder (add if SKU data present - requires SKU data)
+        top_sku = "N/A"  # Placeholder (add if SKU data present)
         high_risk_count = len(fraud_customers)
 
-        #Summary Cards
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("💰 Total Refund Value", f"₹{total_refund:,.0f}")
         c2.metric("📊 Refund % of Orders", f"{refund_pct}%")
         c3.metric("📅 Total Refund Days", total_days)
-        c4.metric("🥭 Top Refund SKU", top_sku) #Requires implementation later
+        c4.metric("🥭 Top Refund SKU", top_sku)
         c5.metric("👤 High-Risk Customers", high_risk_count)
 
-        # --- AI Insights ---
-        st.subheader("🤖 AI Insights & Recommendations")
-        # --- Generate AI Insights ---
-        insights = generate_ai_insights(df)
-        st.write(insights)
+        # --- Charts ---
+        st.subheader("📊 Refund Analysis Charts")
 
-        # --- Visual Dashboard ---
-        st.subheader("📊 Visual Dashboard")
-        tab1, tab2, tab3, tab4 = st.tabs(["Refunds by SKU", "Refunds by Reason", "Refund Trend", "Top Performers"])
+        tab1, tab2, tab3, tab4 = st.tabs(["By Customer", "By Date", "Fraud Customers", "Pivot Views"])
 
         with tab1:
-            # Implement a bar chart for refunds by SKU.
-            # Assuming you have a 'product_name' column, replace 'product_name' if your column name is different
-            if 'product_name' in df.columns:
-                sku_refunds = df.groupby('product_name')['Refund_Value'].sum().reset_index()
-                fig_sku = px.bar(sku_refunds, x='product_name', y='Refund_Value', title='Refunds by SKU (Product Name)')
-                st.plotly_chart(fig_sku, use_container_width=True)
-            else:
-                st.warning("⚠️ 'product_name' column not found.  Cannot display Refunds by SKU chart.")
-
+            fig = px.bar(df.groupby("Customer_ID", as_index=False)["Refund_Value"].sum(),
+                         x="Customer_ID", y="Refund_Value", title="Refunds by Customer")
+            st.plotly_chart(fig, use_container_width=True)
 
         with tab2:
-            # Implement a pie chart for refunds by reason.
-            # Assuming a 'refund_comment' is present, and can be grouped into categories
-            if 'refund_comment' in df.columns:
-                # Simple example:  Categorize based on keywords in the comment
-                def categorize_reason(comment):
-                    if pd.isna(comment):
-                        return "Other"
-                    comment = comment.lower()
-                    if "quality" in comment or "bad" in comment:
-                        return "Quality"
-                    if "damage" in comment or "broken" in comment:
-                        return "Damage"
-                    if "fraud" in comment or "scam" in comment:
-                        return "Customer Fraud"
-                    return "Other"
-
-                df['refund_reason'] = df['refund_comment'].apply(categorize_reason)
-                reason_refunds = df.groupby('refund_reason')['Refund_Value'].sum().reset_index()
-                fig_reason = px.pie(reason_refunds, names='refund_reason', values='Refund_Value',
-                                     title='Refunds by Reason')
-                st.plotly_chart(fig_reason, use_container_width=True)
-            else:
-                st.warning("⚠️ 'refund_comment' column not found.  Cannot display Refunds by Reason chart.")
-
+            fig = px.line(df.groupby("Refund_Date")["Refund_Value"].sum().reset_index(),
+                          x="Refund_Date", y="Refund_Value", title="Refund Trend Over Time")
+            st.plotly_chart(fig, use_container_width=True)
 
         with tab3:
-            # Implement a line chart for the refund trend (daily or weekly).
-            # Group by `Refund_Date`
-            refund_trend = df.groupby('Refund_Date')['Refund_Value'].sum().reset_index()
-            fig_trend = px.line(refund_trend, x='Refund_Date', y='Refund_Value', title='Refund Trend Over Time (Daily)')
-            st.plotly_chart(fig_trend, use_container_width=True)
+            if not fraud_df.empty:
+                fig = px.bar(fraud_df, x="Customer_ID", y="Refund_Value", title="Fraud Customers Refund Value")
+                st.plotly_chart(fig, use_container_width=True)
+                st.download_button("⬇️ Download Fraud Customer List", data=download_excel(fraud_df),
+                                   file_name="fraud_customers.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            else:
+                st.success("✅ No fraud customers detected")
 
         with tab4:
-            # Implement a table for top SKUs, customers, and riders.
-            # Top 10 SKUs
-            if 'product_name' in df.columns:
-                top_skus = df.groupby('product_name')['Refund_Value'].sum().nlargest(10).reset_index()
-                top_skus.rename(columns={'Refund_Value': 'Total Refund Value'}, inplace=True)
-                st.subheader("Top 10 SKUs by Refund Value")
-                st.dataframe(top_skus, use_container_width=True)
-            else:
-                st.warning("⚠️ 'product_name' column not found.  Cannot display Top SKUs table.")
+            fig = px.box(df, x="Customer_ID", y="Refund_Value", title="Refund Distribution per Customer")
+            st.plotly_chart(fig, use_container_width=True)
 
-            # Top 10 Customers
-            top_customers = df.groupby('Customer_ID')['Refund_Value'].sum().nlargest(10).reset_index()
-            top_customers.rename(columns={'Refund_Value': 'Total Refund Value'}, inplace=True)
-            st.subheader("Top 10 Customers by Refund Value")
-            st.dataframe(top_customers, use_container_width=True)
+        # --- AI Insights ---
+        with st.spinner("🧠 Generating AI Insights..."):
+            st.subheader("🤖 AI Insights & Recommendations")
+            insights = generate_ai_insights(df)
+            st.write(insights)
 
-            # (Placeholder for Top Riders - requires rider data)
-            st.subheader("Top Riders (Placeholder - requires rider data)")
-            st.write("Rider data not available in this dataset.") # If rider data isn't in your input.
-
-        # --- Recommendations Panel ---
-        st.subheader("🚦 Recommendations")
-        # --- Refund Blocking Criteria Suggestions ---
-        st.write("Based on your data, here are some potential refund blocking criteria:")
-        # -- Example Recommendations (Customize These) --
-        if 'product_name' in df.columns:
-            #SKU Recommendation
-            sku_refunds = df.groupby('product_name')['Refund_Value'].sum().reset_index()
-            total_sales_by_sku = df.groupby('product_name')['sales_without_delivery_charge'].sum().reset_index()
-            sku_data = pd.merge(sku_refunds, total_sales_by_sku, on='product_name', how='left')
-            sku_data['refund_percentage'] = (sku_data['Refund_Value'] / sku_data['sales_without_delivery_charge']) * 100
-            high_refund_skus = sku_data[sku_data['refund_percentage'] > 15]
-            if not high_refund_skus.empty:
-                st.markdown("<span style='color:red;'>⚠️ Block SKUs with Refund % > 15%:</span>", unsafe_allow_html=True)
-                for index, row in high_refund_skus.iterrows():
-                   st.write(f"  - Block SKU '{row['product_name']}' (Refund %: {row['refund_percentage']:.2f}%)")
-
-        # Customer Recommendation
-        customer_refunds = df.groupby('Customer_ID')['Refund_Value'].agg(['sum', 'count']).reset_index()
-        customer_refunds.columns = ['Customer_ID', 'Total Refund Value', 'Refund Count']
-        high_refund_customers = customer_refunds[customer_refunds['Refund Count'] > 5]  # Example threshold
-        if not high_refund_customers.empty:
-            st.markdown("<span style='color:red;'>⚠️ Flag Customers with > 5 Refund Requests:</span>", unsafe_allow_html=True)
-            for index, row in high_refund_customers.iterrows():
-               st.write(f"  - Flag Customer ID '{row['Customer_ID']}' (Refund Count: {row['Refund Count']})")
+        # --- Display Raw Data (Optional) ---
+        with st.expander("🗂️ Show Raw Data"):
+            st.dataframe(df)
