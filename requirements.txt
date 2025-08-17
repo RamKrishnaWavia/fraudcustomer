@@ -1,4 +1,7 @@
 streamlit
 pandas
-matplotlib
+plotly
 openpyxl
+reportlab
+openai
+xlsxwriter
