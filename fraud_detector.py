@@ -9,11 +9,11 @@ import os
 # --- Set OpenAI API Key (using environment variable) ---
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# --- Helper Functions (as before) ---
+# --- Helper Functions ---
 def validate_data(df, required_cols):
     """Validates the DataFrame and handles potential issues."""
     if not all(col in df.columns for col in required_cols):
-        st.error(f"❌ File must contain columns: {required_cols}.  Found columns: {df.columns.tolist()}") #Show the list of actual columns found.
+        st.error(f"❌ File must contain columns: {required_cols}.  Found columns: {df.columns.tolist()}")
         return False
 
     # Convert columns to the correct datatypes
@@ -128,6 +128,16 @@ if uploaded_file:
 
     # --- Data Validation and Preprocessing ---
     required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge"]
+
+    # --- **Column Renaming (if needed)** ---
+    # Only rename columns *before* validating the data.
+    rename_dict = {
+        "customer_id": "Customer_ID",  # Rename "customer_id" to "Customer_ID"
+        "order_date": "order_date",  #No change needed
+        "sales_without_delivery_charge": "sales_without_delivery_charge" #No change needed
+    }
+    df = df.rename(columns=rename_dict)
+
     df = validate_data(df, required_cols)
 
     if df is not False:  #Proceed only if validation is successful
