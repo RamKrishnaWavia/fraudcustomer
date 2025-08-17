@@ -9,12 +9,11 @@ import os
 # --- Set OpenAI API Key (using environment variable) ---
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# --- Helper Functions (as before, but with minor tweaks) ---
-
+# --- Helper Functions (as before) ---
 def validate_data(df, required_cols):
     """Validates the DataFrame and handles potential issues."""
     if not all(col in df.columns for col in required_cols):
-        st.error(f"❌ File must contain columns: {required_cols}")
+        st.error(f"❌ File must contain columns: {required_cols}.  Found columns: {df.columns.tolist()}") #Show the list of actual columns found.
         return False
 
     # Convert columns to the correct datatypes
@@ -118,10 +117,14 @@ uploaded_file = st.file_uploader("Upload Refund Data (Excel/CSV)", type=["csv", 
 
 if uploaded_file:
     # Load data
-    if uploaded_file.name.endswith(".csv"):
-        df = pd.read_csv(uploaded_file)
-    else:
-        df = pd.read_excel(uploaded_file)
+    try:
+        if uploaded_file.name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file, sep=',')  # Added delimiter (you may need to change this)
+        else:
+            df = pd.read_excel(uploaded_file)
+    except Exception as e:
+        st.error(f"❌ Error loading the file: {e}")
+        st.stop() # Stop execution if there's a file loading issue.
 
     # --- Data Validation and Preprocessing ---
     required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge"]
