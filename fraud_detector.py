@@ -24,6 +24,11 @@ def validate_data(df, required_cols):
         st.error(f"❌ Error converting data types: {e}. Check date and numeric columns.")
         return False
 
+    # Check for missing values
+    if df.isnull().any().any():
+        st.warning("⚠️ Missing values detected.  Rows with missing values will be dropped for processing.")
+        df = df.dropna()  # Or use imputation based on your needs
+
     return df  # Return the (potentially modified) dataframe
 
 
@@ -123,7 +128,7 @@ if uploaded_file:
         st.stop() # Stop execution if there's a file loading issue.
 
     # --- Data Validation and Preprocessing ---
-    required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge", "refund_comment"] #Now required_cols has refund_comment
+    required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge", "refund_comment", "product_name"] #Now required_cols has refund_comment and product_name
 
     # --- **Column Renaming (if needed)** ---
     # Only rename columns *before* validating the data.
@@ -131,7 +136,8 @@ if uploaded_file:
         "customer_id": "Customer_ID",  # Rename "customer_id" to "Customer_ID"
         "order_date": "order_date",  #No change needed
         "sales_without_delivery_charge": "sales_without_delivery_charge", #No change needed
-        "refund_comment": "refund_comment" # no change needed
+        "refund_comment": "refund_comment", # no change needed
+        "product_name": "product_name"
     }
     df = df.rename(columns=rename_dict)
 
@@ -159,14 +165,20 @@ if uploaded_file:
         total_refund = df["Refund_Value"].sum()
         refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].abs().sum())*100, 2) #No need for the conditional statement. sales_without_delivery_charge is used
         total_days = df["Refund_Date"].nunique()
-        top_sku = "N/A"  # Placeholder (add if SKU data present)
+
+        # --- Top Refund SKU Calculation ---
+        if 'product_name' in df.columns:
+            top_sku = df.groupby('product_name')['Refund_Value'].sum().nlargest(1).index[0]
+        else:
+            top_sku = "N/A"  # or handle the missing product_name column
+
         high_risk_count = len(fraud_customers)
 
         c1, c2, c3, c4, c5 = st.columns(5)
         c1.metric("💰 Total Refund Value", f"₹{total_refund:,.0f}")
         c2.metric("📊 Refund % of Orders", f"{refund_pct}%")
         c3.metric("📅 Total Refund Days", total_days)
-        c4.metric("🥭 Top Refund SKU", top_sku)
+        c4.metric("🥭 Top Refund SKU", top_sku) # Display Top SKU
         c5.metric("👤 High-Risk Customers", high_risk_count)
 
         # --- Charts ---
