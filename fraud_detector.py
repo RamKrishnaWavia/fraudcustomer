@@ -1,178 +1,157 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
+import plotly.express as px
 from io import BytesIO
 import openai
-import datetime
+import os
 
-# ========== SETUP ==========
-st.set_page_config(page_title="Refund Fraud Detection", layout="wide")
+# Set OpenAI API Key (must be set in Streamlit Cloud -> Secrets)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Sidebar for upload
-st.sidebar.header("Upload Data")
-uploaded_file = st.sidebar.file_uploader("Upload Excel/CSV", type=["xlsx", "csv"])
+# ---------------------------
+# Helper Functions
+# ---------------------------
 
-# OpenAI key (must set in Streamlit Cloud → Secrets)
-openai.api_key = st.secrets.get("OPENAI_API_KEY", "")
+def detect_fraud_customers(df):
+    fraud_customers = []
 
-# Required columns
-required_columns = ["customer_id", "order_date", "sales_without_delivery_charge", "refund_comment"]
+    # Rule 1: ≥3 refunds in last 30 days
+    last_30 = df[df['Refund_Date'] >= (df['Refund_Date'].max() - pd.Timedelta(days=30))]
+    refunds_30 = last_30.groupby("Customer_ID").size()
+    fraud_customers += refunds_30[refunds_30 >= 3].index.tolist()
 
-# ========== FILE HANDLING ==========
+    # Rule 2: Refunds for 3 consecutive days
+    daily_refunds = df.groupby(["Customer_ID", "Refund_Date"]).size().reset_index(name="count")
+    for cust, grp in daily_refunds.groupby("Customer_ID"):
+        grp = grp.sort_values("Refund_Date")
+        grp["consec"] = (grp["Refund_Date"].diff().dt.days == 1).astype(int)
+        grp["streak"] = grp["consec"].groupby((grp["consec"] != grp["consec"].shift()).cumsum()).cumsum()
+        if (grp["streak"] >= 2).any():
+            fraud_customers.append(cust)
+
+    return list(set(fraud_customers))
+
+
+def generate_ai_insights(df):
+    try:
+        prompt = f"""
+        Analyze the refund dataset and provide:
+        1. Key refund behavior patterns
+        2. Top fraud risks
+        3. Suggested actions to minimize fraud
+        Dataset Summary:
+        Total Refund Value: {df['Refund_Value'].sum()}
+        Refund %: {round((df['Refund_Value'].sum()/df['sales_without_delivery_charge'].sum())*100,2)}%
+        Unique Customers: {df['Customer_ID'].nunique()}
+        """
+        response = openai.ChatCompletion.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response["choices"][0]["message"]["content"]
+    except Exception as e:
+        return f"⚠️ AI Insights not available: {e}"
+
+
+def download_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        df.to_excel(writer, index=False, sheet_name="Fraud_Customers")
+    return output.getvalue()
+
+# ---------------------------
+# Streamlit UI
+# ---------------------------
+
+st.set_page_config(page_title="Refund & Fraud Detection Dashboard", layout="wide")
+
+st.title("🛡️ Refund & Fraud Detection Dashboard")
+
+# File uploader with template
+with st.expander("📥 Download Template"):
+    st.markdown("Download the input Excel template, fill it with data, then re-upload.")
+    template = pd.DataFrame({
+        "Customer_ID": [],
+        "order_date": [],
+        "sales_without_delivery_charge": []
+    })
+    st.download_button("⬇️ Download Template", data=template.to_csv(index=False), file_name="refund_template.csv")
+
+uploaded_file = st.file_uploader("Upload Refund Data (Excel/CSV)", type=["csv", "xlsx"])
+
 if uploaded_file:
-    if uploaded_file.name.endswith("csv"):
+    # Load data
+    if uploaded_file.name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
     else:
         df = pd.read_excel(uploaded_file)
 
-    # Validation
-    if not all(col in df.columns for col in required_columns):
-        st.error(f"❌ File must contain these columns: {required_columns}")
-    else:
-        # Convert dates
-        df["order_date"] = pd.to_datetime(df["order_date"], errors="coerce")
+    # Ensure required cols
+    required_cols = ["Customer_ID", "order_date", "sales_without_delivery_charge"]
+    if not all(col in df.columns for col in required_cols):
+        st.error(f"❌ File must contain columns: {required_cols}")
+        st.stop()
 
-        # Refund Value: only where refund_comment is not empty
-        df["Refund_Value"] = np.where(df["refund_comment"].notna() & (df["refund_comment"] != ""),
-                                      df["sales_without_delivery_charge"], 0)
+    # Rename for consistency
+    df["Refund_Date"] = pd.to_datetime(df["order_date"])
+    df["Refund_Value"] = df["sales_without_delivery_charge"]
 
-        # Refund days
-        df["Refund_Day"] = df["order_date"].dt.date
+    # ---------------------------
+    # Fraud Detection
+    # ---------------------------
+    fraud_customers = detect_fraud_customers(df)
+    fraud_df = df[df["Customer_ID"].isin(fraud_customers)].groupby("Customer_ID", as_index=False)["Refund_Value"].sum()
 
-        # ===== Summary Stats =====
-        total_refund_value = df["Refund_Value"].sum()
-        total_orders = df.shape[0]
-        refund_orders = df[df["Refund_Value"] > 0].shape[0]
-        refund_pct = (refund_orders / total_orders * 100) if total_orders > 0 else 0
-        total_refund_days = df.loc[df["Refund_Value"] > 0, "Refund_Day"].nunique()
-        top_refund_sku = df.loc[df["Refund_Value"] > 0, "product_name"].mode()[0] if not df[df["Refund_Value"] > 0].empty else "N/A"
-        high_risk_customers = df.loc[df["Refund_Value"] > 0, "customer_id"].nunique()
+    # ---------------------------
+    # Summary Cards
+    # ---------------------------
+    total_refund = df["Refund_Value"].sum()
+    refund_pct = round((df["Refund_Value"].sum() / df["sales_without_delivery_charge"].sum())*100, 2)
+    total_days = df["Refund_Date"].nunique()
+    top_sku = "N/A"  # Placeholder (add if SKU data present)
+    high_risk_count = len(fraud_customers)
 
-        # ===== Fraud Detection =====
-        fraud_customers = []
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("💰 Total Refund Value", f"₹{total_refund:,.0f}")
+    c2.metric("📊 Refund % of Orders", f"{refund_pct}%")
+    c3.metric("📅 Total Refund Days", total_days)
+    c4.metric("🥭 Top Refund SKU", top_sku)
+    c5.metric("👤 High-Risk Customers", high_risk_count)
 
-        for cust, cust_df in df.groupby("customer_id"):
-            cust_df = cust_df[cust_df["Refund_Value"] > 0].sort_values("order_date")
+    # ---------------------------
+    # Charts
+    # ---------------------------
+    st.subheader("📊 Refund Analysis Charts")
 
-            # 1. ≥3 refunds in last 30 days
-            rolling_window = cust_df.set_index("order_date").rolling("30D")["Refund_Value"].count()
-            if (rolling_window >= 3).any():
-                fraud_customers.append(cust)
+    tab1, tab2, tab3, tab4 = st.tabs(["By Customer", "By Date", "Fraud Customers", "Pivot Views"])
 
-            # 2. 3 consecutive days refunds
-            dates = cust_df["order_date"].dt.date.drop_duplicates().sort_values()
-            consec = 1
-            for i in range(1, len(dates)):
-                if (dates.iloc[i] - dates.iloc[i-1]).days == 1:
-                    consec += 1
-                    if consec >= 3:
-                        fraud_customers.append(cust)
-                        break
-                else:
-                    consec = 1
+    with tab1:
+        fig = px.bar(df.groupby("Customer_ID", as_index=False)["Refund_Value"].sum(),
+                     x="Customer_ID", y="Refund_Value", title="Refunds by Customer")
+        st.plotly_chart(fig, use_container_width=True)
 
-        fraud_customers = list(set(fraud_customers))
-        fraud_df = df[df["customer_id"].isin(fraud_customers)]
+    with tab2:
+        fig = px.line(df.groupby("Refund_Date", as_index=False)["Refund_Value"].sum(),
+                      x="Refund_Date", y="Refund_Value", title="Refund Trend Over Time")
+        st.plotly_chart(fig, use_container_width=True)
 
-        # ========== UI ==========
-        st.title("🛡️ Refund Fraud Detection Dashboard")
-
-        # ===== Summary Cards =====
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("💰 Total Refund Value", f"₹{total_refund_value:,.0f}")
-        col2.metric("📊 Refund % of Orders", f"{refund_pct:.2f}%")
-        col3.metric("📅 Refund Days", total_refund_days)
-        col4.metric("🥭 Top Refund SKU", top_refund_sku)
-        col5.metric("👤 High-Risk Customers", high_risk_customers)
-
-        # ===== Charts =====
-        st.subheader("📈 Refund Analysis by Dimensions")
-
-        tab1, tab2, tab3, tab4, tab5 = st.tabs(["Hub", "Dark Store", "Category", "Society ID", "Fraud Customers"])
-
-        with tab1:
-            fig, ax = plt.subplots()
-            sns.barplot(x="Hub", y="Refund_Value", data=df, estimator=sum, ci=None, ax=ax)
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
-
-        with tab2:
-            fig, ax = plt.subplots()
-            sns.barplot(x="dark_store", y="Refund_Value", data=df, estimator=sum, ci=None, ax=ax)
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
-
-        with tab3:
-            fig, ax = plt.subplots()
-            sns.barplot(x="category", y="Refund_Value", data=df, estimator=sum, ci=None, ax=ax)
-            plt.xticks(rotation=45)
-            st.pyplot(fig)
-
-        with tab4:
-            fig, ax = plt.subplots()
-            sns.barplot(x="society_id", y="Refund_Value", data=df, estimator=sum, ci=None, ax=ax)
-            plt.xticks(rotation=90)
-            st.pyplot(fig)
-
-        with tab5:
-            st.write("🚨 Fraud Customers Detected")
-            st.dataframe(fraud_df[["customer_id", "order_date", "Refund_Value", "refund_comment"]])
-
-            # Download option
-            buffer = BytesIO()
-            fraud_df.to_excel(buffer, index=False)
-            st.download_button(
-                label="📥 Download Fraud Customers (Excel)",
-                data=buffer.getvalue(),
-                file_name="fraud_customers.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
-
-            csv = fraud_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="📥 Download Fraud Customers (CSV)",
-                data=csv,
-                file_name="fraud_customers.csv",
-                mime="text/csv"
-            )
-
-        # ===== AI Insights =====
-        st.subheader("🤖 AI Insights & Recommendations")
-        if openai.api_key:
-            try:
-                prompt = f"""
-                Analyze this refund dataset summary:
-                - Total refund value = {total_refund_value}
-                - Refund % = {refund_pct:.2f}%
-                - Refund days = {total_refund_days}
-                - Top refund SKU = {top_refund_sku}
-                - High-risk customers = {high_risk_customers}
-
-                Provide insights, patterns, and business recommendations to reduce fraud and improve controls.
-                """
-                response = openai.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{"role": "system", "content": "You are a data analyst."},
-                              {"role": "user", "content": prompt}]
-                )
-                st.info(response.choices[0].message.content)
-            except Exception as e:
-                st.warning(f"⚠️ AI Insights unavailable: {e}")
+    with tab3:
+        if not fraud_df.empty:
+            fig = px.bar(fraud_df, x="Customer_ID", y="Refund_Value", title="Fraud Customers Refund Value")
+            st.plotly_chart(fig, use_container_width=True)
+            st.download_button("⬇️ Download Fraud Customer List", data=download_excel(fraud_df),
+                               file_name="fraud_customers.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
         else:
-            st.warning("⚠️ Set your OPENAI_API_KEY in Streamlit Cloud Secrets for AI insights.")
+            st.success("✅ No fraud customers detected")
 
-else:
-    st.info("⬆️ Upload a file to begin analysis. Download input template below.")
+    with tab4:
+        fig = px.box(df, x="Customer_ID", y="Refund_Value", title="Refund Distribution per Customer")
+        st.plotly_chart(fig, use_container_width=True)
 
-    # Template file
-    template_df = pd.DataFrame(columns=required_columns)
-    buffer = BytesIO()
-    template_df.to_excel(buffer, index=False)
-    st.download_button(
-        label="📥 Download Template Excel",
-        data=buffer.getvalue(),
-        file_name="refund_template.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+    # ---------------------------
+    # AI Insights
+    # ---------------------------
+    st.subheader("🤖 AI Insights & Recommendations")
+    insights = generate_ai_insights(df)
+    st.write(insights)
